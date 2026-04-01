@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { cursorPosition, getCurrentWindow } from "@tauri-apps/api/window";
-import type { PanelPhase, Platform, Preferences } from "../types";
+import type { EdgeSide, PanelPhase, Platform, Preferences } from "../types";
 
 const PANEL_ANIMATION_MS = 220;
 const CLOSE_DELAY_MS = 260;
-const MIN_PANEL_WIDTH = 520;
-const MAX_PANEL_WIDTH = 760;
+const MIN_PANEL_WIDTH = 680;
+const MAX_PANEL_WIDTH = 960;
 const TOP_BOTTOM_MARGIN = 24;
 const HANDLE_ZONE_HEIGHT = 220;
 const TRIGGER_BUFFER = 28;
@@ -25,6 +25,7 @@ interface ShellGeometry {
   width: number;
   height: number;
   handleWidth: number;
+  edgeSide: EdgeSide;
 }
 
 type PointerZone =
@@ -34,24 +35,6 @@ type PointerZone =
   | "panel"
   | "resize"
   | "reposition";
-
-async function syncShell(panelWidth: number, reveal: number, panelOffsetY: number) {
-  await invoke("sync_shell_state", { panelWidth, reveal, panelOffsetY });
-}
-
-async function animateShell(
-  panelWidth: number,
-  targetReveal: number,
-  panelOffsetY: number,
-  durationMs = PANEL_ANIMATION_MS,
-) {
-  await invoke("animate_shell_state", {
-    panelWidth,
-    targetReveal,
-    panelOffsetY,
-    durationMs,
-  });
-}
 
 async function readShellGeometry() {
   return invoke<ShellGeometry>("get_shell_geometry");
@@ -75,17 +58,22 @@ function classifyPointerZone(
   cursorY: number,
   geometry: ShellGeometry,
 ): PointerZone {
+  const handleOnRight = geometry.edgeSide === "left";
   const handleTop = geometry.y + (geometry.height - HANDLE_ZONE_HEIGHT) / 2;
   const handleBottom = handleTop + HANDLE_ZONE_HEIGHT;
   const triggerRect = {
-    left: geometry.x,
-    right: geometry.x + geometry.handleWidth + TRIGGER_BUFFER + 8,
+    left: handleOnRight
+      ? geometry.x + geometry.width - geometry.handleWidth - TRIGGER_BUFFER - 8
+      : geometry.x,
+    right: handleOnRight
+      ? geometry.x + geometry.width
+      : geometry.x + geometry.handleWidth + TRIGGER_BUFFER + 8,
     top: handleTop - TRIGGER_BUFFER,
     bottom: handleBottom + TRIGGER_BUFFER,
   };
   const panelRect = {
-    left: geometry.x + geometry.handleWidth,
-    right: geometry.x + geometry.width,
+    left: handleOnRight ? geometry.x : geometry.x + geometry.handleWidth,
+    right: handleOnRight ? geometry.x + geometry.width - geometry.handleWidth : geometry.x + geometry.width,
     top: geometry.y,
     bottom: geometry.y + geometry.height,
   };
@@ -96,8 +84,8 @@ function classifyPointerZone(
     bottom: panelRect.bottom + PANEL_BUFFER,
   };
   const resizeRect = {
-    left: panelRect.left - 16,
-    right: panelRect.left + 16,
+    left: handleOnRight ? panelRect.right - 16 : panelRect.left - 16,
+    right: handleOnRight ? panelRect.right + 16 : panelRect.left + 16,
     top: panelRect.top + 24,
     bottom: panelRect.bottom - 24,
   };
@@ -146,10 +134,35 @@ export function usePanelController({
   const panelWidthRef = useRef(preferences.panelWidth);
   const panelOffsetYRef = useRef(preferences.panelOffsetY);
   const dismissModeRef = useRef(preferences.dismissMode);
+  const edgeSideRef = useRef<EdgeSide>(preferences.edgeSide);
   const pinnedRef = useRef(preferences.pinned);
   const settingsOpenRef = useRef(false);
   const activeZoneRef = useRef<PointerZone>("outside");
   const splitContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const syncShell = async (panelWidth: number, reveal: number, panelOffsetY: number) => {
+    await invoke("sync_shell_state", {
+      panelWidth,
+      reveal,
+      panelOffsetY,
+      edgeSide: edgeSideRef.current,
+    });
+  };
+
+  const animateShell = async (
+    panelWidth: number,
+    targetReveal: number,
+    panelOffsetY: number,
+    durationMs = PANEL_ANIMATION_MS,
+  ) => {
+    await invoke("animate_shell_state", {
+      panelWidth,
+      targetReveal,
+      panelOffsetY,
+      edgeSide: edgeSideRef.current,
+      durationMs,
+    });
+  };
 
   const clearCloseDelay = () => {
     if (closeDelayRef.current) {
@@ -170,10 +183,9 @@ export function usePanelController({
     setPhase(nextPhase);
   };
 
-  const isProtectedState = () =>
+  const isStrictlyProtectedState = () =>
     phaseRef.current === "resizing" ||
     phaseRef.current === "repositioning" ||
-    phaseRef.current === "interacting" ||
     settingsOpenRef.current ||
     pinnedRef.current;
 
@@ -202,7 +214,11 @@ export function usePanelController({
   };
 
   const collapsePanel = () => {
-    if (phaseRef.current === "collapsed" || phaseRef.current === "closing" || isProtectedState()) {
+    if (
+      phaseRef.current === "collapsed" ||
+      phaseRef.current === "closing" ||
+      isStrictlyProtectedState()
+    ) {
       return;
     }
 
@@ -210,7 +226,7 @@ export function usePanelController({
   };
 
   const requestClose = () => {
-    if (pinnedRef.current || isProtectedState()) {
+    if (pinnedRef.current || isStrictlyProtectedState()) {
       return;
     }
 
@@ -225,7 +241,11 @@ export function usePanelController({
   };
 
   const scheduleClose = () => {
-    if (dismissModeRef.current !== "hover-off" || pinnedRef.current || isProtectedState()) {
+    if (
+      dismissModeRef.current !== "hover-off" ||
+      pinnedRef.current ||
+      isStrictlyProtectedState()
+    ) {
       return;
     }
 
@@ -239,9 +259,11 @@ export function usePanelController({
     panelWidthRef.current = preferences.panelWidth;
     panelOffsetYRef.current = preferences.panelOffsetY;
     dismissModeRef.current = preferences.dismissMode;
+    edgeSideRef.current = preferences.edgeSide;
     pinnedRef.current = preferences.pinned;
   }, [
     preferences.dismissMode,
+    preferences.edgeSide,
     preferences.panelOffsetY,
     preferences.panelWidth,
     preferences.pinned,
@@ -265,7 +287,7 @@ export function usePanelController({
 
     void windowHandle
       .onFocusChanged(({ payload: focused }) => {
-        if (!focused && dismissModeRef.current === "click-away" && !isProtectedState()) {
+        if (!focused && dismissModeRef.current === "click-away" && !isStrictlyProtectedState()) {
           requestClose();
         }
       })
@@ -334,7 +356,7 @@ export function usePanelController({
     }
 
     void syncShell(panelWidthRef.current, revealRef.current, panelOffsetYRef.current);
-  }, [preferences.panelOffsetY, preferences.panelWidth, ready]);
+  }, [preferences.edgeSide, preferences.panelOffsetY, preferences.panelWidth, ready]);
 
   const beginPanelResize = async (metaKey: boolean) => {
     if (!metaKey) {

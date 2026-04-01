@@ -89,3 +89,109 @@ export function ImageIcon() {
     </svg>
   );
 }
+
+export function NoteIcon() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path
+        d="M4 2.25h5.6L12.75 5.4v8.35a1.5 1.5 0 0 1-1.5 1.5H4a1.75 1.75 0 0 1-1.75-1.75V4A1.75 1.75 0 0 1 4 2.25Z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+      <path d="M9.25 2.5v3.25h3.25M5.25 8h5.5M5.25 10.5h4.25" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function GlobeIcon() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2" />
+      <path
+        d="M2.5 8h11M8 2c1.58 1.52 2.5 3.66 2.5 6S9.58 12.48 8 14M8 2C6.42 3.52 5.5 5.66 5.5 8s.92 4.48 2.5 6"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+export function LinkIcon() {
+  return (
+    <svg aria-hidden="true" width="15" height="15" viewBox="0 0 15 15" fill="none">
+      <path
+        d="M6 9 4.6 10.4a2.1 2.1 0 0 1-2.98-2.96l2.1-2.1A2.1 2.1 0 0 1 6.7 5.4m2.3.2 1.4-1.4a2.1 2.1 0 1 1 2.97 2.97l-2.1 2.1A2.1 2.1 0 0 1 8.3 9.6M5.2 7.8h4.6"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function PlusIcon() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function EyeOffIcon() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path
+        d="M2 2.5 14 13.5M6.1 6.25A2.5 2.5 0 0 0 9.54 9.4m2.54.56A7.58 7.58 0 0 1 8 11.25c-3.02 0-5.3-1.77-6.5-4.25A7.53 7.53 0 0 1 4.76 4.1M11 5.05A7.72 7.72 0 0 1 14.5 7c-.52 1.08-1.2 2.01-2.02 2.77"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function LockIcon() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="3" y="7" width="10" height="7" rx="2" stroke="currentColor" strokeWidth="1.2" />
+      <path
+        d="M5.25 7V5.75a2.75 2.75 0 1 1 5.5 0V7"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+export function SunIcon() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.2" />
+      <path
+        d="M8 1.75v1.5M8 12.75v1.5M3.58 3.58l1.06 1.06M11.36 11.36l1.06 1.06M1.75 8h1.5M12.75 8h1.5M3.58 12.42l1.06-1.06M11.36 4.64l1.06-1.06"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+export function MoonIcon() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path
+        d="M10.45 2.15a5.55 5.55 0 1 0 3.4 9.83 4.95 4.95 0 1 1-3.4-9.83Z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}

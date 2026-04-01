@@ -29,9 +29,28 @@ pub enum DismissMode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EdgeSide {
+    Left,
+    Right,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ThemeMode {
+    System,
+    Light,
+    Dark,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Preferences {
     #[serde(rename = "dismissMode")]
     pub dismiss_mode: DismissMode,
+    #[serde(rename = "edgeSide")]
+    pub edge_side: EdgeSide,
+    #[serde(rename = "themeMode")]
+    pub theme_mode: ThemeMode,
     #[serde(rename = "panelWidth")]
     pub panel_width: f64,
     #[serde(rename = "panelOffsetY")]

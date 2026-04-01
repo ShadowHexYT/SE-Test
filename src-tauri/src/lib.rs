@@ -3,7 +3,7 @@ mod models;
 mod persistence;
 mod shell;
 
-use models::{AppBootstrap, PersistedAppState};
+use models::{AppBootstrap, EdgeSide, PersistedAppState};
 use tauri::AppHandle;
 
 #[cfg(target_os = "macos")]
@@ -15,7 +15,7 @@ fn trigger_shell_haptic() -> Result<(), String> {
 
     let performer = NSHapticFeedbackManager::defaultPerformer();
     performer.performFeedbackPattern_performanceTime(
-        NSHapticFeedbackPattern::Alignment,
+        NSHapticFeedbackPattern::LevelChange,
         NSHapticFeedbackPerformanceTime::Now,
     );
 
@@ -71,8 +71,9 @@ fn sync_shell_state(
     panel_width: f64,
     reveal: f64,
     panel_offset_y: f64,
+    edge_side: EdgeSide,
 ) -> Result<(), String> {
-    shell::sync_shell(&app, panel_width, reveal, panel_offset_y)
+    shell::sync_shell(&app, panel_width, reveal, panel_offset_y, edge_side)
 }
 
 #[tauri::command]
@@ -81,6 +82,7 @@ fn animate_shell_state(
     panel_width: f64,
     target_reveal: f64,
     panel_offset_y: f64,
+    edge_side: EdgeSide,
     duration_ms: Option<u64>,
 ) -> Result<(), String> {
     shell::animate_shell(
@@ -88,6 +90,7 @@ fn animate_shell_state(
         panel_width,
         target_reveal,
         panel_offset_y,
+        edge_side,
         duration_ms.unwrap_or(shell::DEFAULT_ANIMATION_MS),
     )
 }

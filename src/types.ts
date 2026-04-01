@@ -1,7 +1,9 @@
 export type Platform = "macos" | "windows" | "linux";
 export type ClipboardItemType = "text" | "image";
-export type ClipboardFilter = "all" | ClipboardItemType;
+export type ClipboardFilter = "all" | ClipboardItemType | "link";
 export type DismissMode = "hover-off" | "click-away";
+export type EdgeSide = "left" | "right";
+export type ThemeMode = "system" | "light" | "dark";
 export type PanelPhase =
   | "collapsed"
   | "opening"
@@ -34,6 +36,8 @@ export interface ClipboardSnapshot {
 
 export interface Preferences {
   dismissMode: DismissMode;
+  edgeSide: EdgeSide;
+  themeMode: ThemeMode;
   panelWidth: number;
   panelOffsetY: number;
   splitRatio: number;
@@ -57,8 +61,10 @@ export interface PlatformMeta {
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
-  dismissMode: "hover-off",
-  panelWidth: 612,
+  dismissMode: "click-away",
+  edgeSide: "right",
+  themeMode: "system",
+  panelWidth: 760,
   panelOffsetY: 0,
   splitRatio: 0.52,
   pinned: false,

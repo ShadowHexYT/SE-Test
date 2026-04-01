@@ -21,6 +21,15 @@ function buildClipboardItem(snapshot: ClipboardSnapshot): ClipboardItem {
   };
 }
 
+function isLikelyLinkText(text: string | undefined) {
+  if (!text) {
+    return false;
+  }
+
+  const normalized = text.trim().toLowerCase();
+  return /^(https?:\/\/|www\.|mailto:)/.test(normalized);
+}
+
 export function useClipboardHistory({
   ready,
   initialHistory,
@@ -86,7 +95,11 @@ export function useClipboardHistory({
     const normalizedQuery = deferredQuery.trim().toLowerCase();
 
     return history.filter((item) => {
-      if (filter !== "all" && item.type !== filter) {
+      if (filter === "link") {
+        if (item.type !== "text" || !isLikelyLinkText(item.text)) {
+          return false;
+        }
+      } else if (filter !== "all" && item.type !== filter) {
         return false;
       }
 

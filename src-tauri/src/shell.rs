@@ -12,19 +12,22 @@ use tauri::{
     WindowSizeConstraints,
 };
 
-pub const HANDLE_WIDTH: f64 = 16.0;
-pub const MIN_PANEL_WIDTH: f64 = 520.0;
-pub const MAX_PANEL_WIDTH: f64 = 760.0;
+use crate::models::EdgeSide;
+
+pub const HANDLE_WIDTH: f64 = 22.0;
+pub const MIN_PANEL_WIDTH: f64 = 680.0;
+pub const MAX_PANEL_WIDTH: f64 = 960.0;
 pub const DEFAULT_ANIMATION_MS: u64 = 220;
-pub const MIN_PANEL_HEIGHT: f64 = 640.0;
-pub const MAX_PANEL_HEIGHT: f64 = 920.0;
-pub const WINDOW_VERTICAL_MARGIN: f64 = 24.0;
+pub const MIN_PANEL_HEIGHT: f64 = 820.0;
+pub const MAX_PANEL_HEIGHT: f64 = 1440.0;
+pub const WINDOW_VERTICAL_MARGIN: f64 = 12.0;
 
 pub struct ShellState {
     animation_generation: AtomicU64,
     panel_width: Mutex<f64>,
     reveal: Mutex<f64>,
     panel_offset_y: Mutex<f64>,
+    edge_side: Mutex<EdgeSide>,
 }
 
 impl Default for ShellState {
@@ -34,6 +37,7 @@ impl Default for ShellState {
             panel_width: Mutex::new(MIN_PANEL_WIDTH),
             reveal: Mutex::new(0.0),
             panel_offset_y: Mutex::new(0.0),
+            edge_side: Mutex::new(EdgeSide::Right),
         }
     }
 }
@@ -52,6 +56,7 @@ fn docked_frame(
     panel_width: f64,
     reveal: f64,
     panel_offset_y: f64,
+    edge_side: &EdgeSide,
 ) -> Result<(LogicalPosition<f64>, LogicalSize<f64>), String> {
     let window = current_window(app)?;
     let monitor = window
@@ -68,15 +73,21 @@ fn docked_frame(
     let reveal_progress = reveal.clamp(0.0, 1.0);
     let logical_width = total_width / scale;
     let monitor_height = f64::from(work_area.size.height) / scale;
-    let logical_height = (monitor_height * 0.84).clamp(MIN_PANEL_HEIGHT, MAX_PANEL_HEIGHT);
+    let logical_height =
+        (monitor_height - (WINDOW_VERTICAL_MARGIN * 2.0)).clamp(MIN_PANEL_HEIGHT, MAX_PANEL_HEIGHT);
+    let logical_left_edge = f64::from(work_area.position.x) / scale;
     let logical_right_edge = f64::from(work_area.position.x + work_area.size.width as i32) / scale;
     let logical_top_bound = f64::from(work_area.position.y) / scale + WINDOW_VERTICAL_MARGIN;
     let logical_bottom_bound =
         (f64::from(work_area.position.y) / scale) + monitor_height - logical_height - WINDOW_VERTICAL_MARGIN;
     let centered_y = (f64::from(work_area.position.y) / scale) + ((monitor_height - logical_height) / 2.0);
     let logical_y = (centered_y + panel_offset_y).clamp(logical_top_bound, logical_bottom_bound.max(logical_top_bound));
-    let logical_x =
-        logical_right_edge - (HANDLE_WIDTH / scale) - ((hidden_width / scale) * reveal_progress);
+    let logical_x = match edge_side {
+        EdgeSide::Right => {
+            logical_right_edge - (HANDLE_WIDTH / scale) - ((hidden_width / scale) * reveal_progress)
+        }
+        EdgeSide::Left => logical_left_edge - (hidden_width / scale) + ((hidden_width / scale) * reveal_progress),
+    };
 
     Ok((
         LogicalPosition::new(logical_x, logical_y),
@@ -134,11 +145,12 @@ pub fn apply_shell_position(
     panel_width: f64,
     reveal: f64,
     panel_offset_y: f64,
+    edge_side: EdgeSide,
 ) -> Result<(), String> {
     let clamped_panel_width = panel_width.clamp(MIN_PANEL_WIDTH, MAX_PANEL_WIDTH);
     let clamped_reveal = reveal.clamp(0.0, 1.0);
     let window = current_window(app)?;
-    let (position, size) = docked_frame(app, clamped_panel_width, clamped_reveal, panel_offset_y)?;
+    let (position, size) = docked_frame(app, clamped_panel_width, clamped_reveal, panel_offset_y, &edge_side)?;
 
     apply_window_style(&window, size, clamped_reveal)?;
     window.set_size(size).map_err(|error| error.to_string())?;
@@ -146,7 +158,14 @@ pub fn apply_shell_position(
         .set_position(position)
         .map_err(|error| error.to_string())?;
 
-    write_shell_state(app, clamped_panel_width, clamped_reveal, panel_offset_y)
+    write_shell_state(app, clamped_panel_width, clamped_reveal, panel_offset_y)?;
+    *app
+        .state::<ShellState>()
+        .edge_side
+        .lock()
+        .map_err(|_| "SwiftEdge shell edge-side lock was poisoned.".to_string())? = edge_side;
+
+    Ok(())
 }
 
 pub fn sync_shell(
@@ -154,10 +173,11 @@ pub fn sync_shell(
     panel_width: f64,
     reveal: f64,
     panel_offset_y: f64,
+    edge_side: EdgeSide,
 ) -> Result<(), String> {
     let shell_state = app.state::<ShellState>();
     shell_state.animation_generation.fetch_add(1, Ordering::SeqCst);
-    apply_shell_position(app, panel_width, reveal, panel_offset_y)
+    apply_shell_position(app, panel_width, reveal, panel_offset_y, edge_side)
 }
 
 pub fn animate_shell(
@@ -165,6 +185,7 @@ pub fn animate_shell(
     panel_width: f64,
     target_reveal: f64,
     panel_offset_y: f64,
+    edge_side: EdgeSide,
     duration_ms: u64,
 ) -> Result<(), String> {
     let shell_state = app.state::<ShellState>();
@@ -192,7 +213,7 @@ pub fn animate_shell(
             let eased = ease_out_cubic(progress);
             let reveal = start_reveal + ((clamped_target - start_reveal) * eased);
 
-            let _ = apply_shell_position(&app_handle, clamped_width, reveal, panel_offset_y);
+            let _ = apply_shell_position(&app_handle, clamped_width, reveal, panel_offset_y, edge_side.clone());
 
             if progress >= 1.0 {
                 return;
@@ -206,7 +227,7 @@ pub fn animate_shell(
 }
 
 pub fn initialize_shell(app: &AppHandle) -> Result<(), String> {
-    sync_shell(app, 612.0, 0.0, 0.0)?;
+    sync_shell(app, 760.0, 0.0, 0.0, EdgeSide::Right)?;
     current_window(app)?.show().map_err(|error| error.to_string())
 }
 
@@ -218,6 +239,7 @@ pub struct ShellGeometry {
     pub width: f64,
     pub height: f64,
     pub handle_width: f64,
+    pub edge_side: String,
 }
 
 pub fn get_shell_geometry(app: &AppHandle) -> Result<ShellGeometry, String> {
@@ -231,5 +253,14 @@ pub fn get_shell_geometry(app: &AppHandle) -> Result<ShellGeometry, String> {
         width: f64::from(size.width),
         height: f64::from(size.height),
         handle_width: HANDLE_WIDTH,
+        edge_side: match &*app
+            .state::<ShellState>()
+            .edge_side
+            .lock()
+            .map_err(|_| "SwiftEdge shell edge-side lock was poisoned.".to_string())?
+        {
+            EdgeSide::Left => "left".to_string(),
+            EdgeSide::Right => "right".to_string(),
+        },
     })
 }

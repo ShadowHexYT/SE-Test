@@ -4,12 +4,12 @@ import { AppShell } from "./components/AppShell";
 import { useClipboardHistory } from "./hooks/useClipboardHistory";
 import { usePanelController } from "./hooks/usePanelController";
 import { getPlatformMeta } from "./lib/platform";
-import { moduleRegistry } from "./modules";
 import {
   DEFAULT_PREFERENCES,
   type AppBootstrap,
   type ClipboardItem,
   type Preferences,
+  type ThemeMode,
 } from "./types";
 import "./App.css";
 
@@ -21,6 +21,7 @@ function App() {
   const [preferences, setPreferences] = useState<Preferences>(DEFAULT_PREFERENCES);
   const [initialHistory, setInitialHistory] = useState<ClipboardItem[]>(EMPTY_HISTORY);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [systemTheme, setSystemTheme] = useState<Exclude<ThemeMode, "system">>("light");
 
   useEffect(() => {
     let isMounted = true;
@@ -58,6 +59,24 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const applyTheme = (matches: boolean) => {
+      setSystemTheme(matches ? "dark" : "light");
+    };
+
+    applyTheme(mediaQuery.matches);
+    const onChange = (event: MediaQueryListEvent) => {
+      applyTheme(event.matches);
+    };
+
+    mediaQuery.addEventListener("change", onChange);
+
+    return () => {
+      mediaQuery.removeEventListener("change", onChange);
+    };
+  }, []);
+
   const clipboard = useClipboardHistory({
     ready,
     initialHistory,
@@ -87,15 +106,16 @@ function App() {
   }, [ready, preferences, clipboard.history]);
 
   const platformMeta = getPlatformMeta(platform);
+  const resolvedTheme = preferences.themeMode === "system" ? systemTheme : preferences.themeMode;
 
   return (
     <AppShell
       clipboard={clipboard}
       loadError={loadError}
-      moduleRegistry={moduleRegistry}
       panel={panel}
       platformMeta={platformMeta}
       preferences={preferences}
+      resolvedTheme={resolvedTheme}
       setPreferences={setPreferences}
     />
   );

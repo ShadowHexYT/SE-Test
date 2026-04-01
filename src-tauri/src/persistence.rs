@@ -3,12 +3,14 @@ use std::path::PathBuf;
 
 use tauri::{AppHandle, Manager};
 
-use crate::models::{DismissMode, PersistedAppState, Preferences};
+use crate::models::{DismissMode, EdgeSide, PersistedAppState, Preferences, ThemeMode};
 
 fn default_preferences() -> Preferences {
     Preferences {
-        dismiss_mode: DismissMode::HoverOff,
-        panel_width: 612.0,
+        dismiss_mode: DismissMode::ClickAway,
+        edge_side: EdgeSide::Right,
+        theme_mode: ThemeMode::System,
+        panel_width: 760.0,
         panel_offset_y: 0.0,
         split_ratio: 0.52,
         pinned: false,
