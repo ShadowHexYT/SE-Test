@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "SwiftEdge",
+  "productName": "Memora",
   "version": "0.1.0",
-  "identifier": "com.swiftedge.desktop",
+  "identifier": "com.memora.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "SwiftEdge",
+        "title": "Memora",
         "width": 452,
         "height": 900,
         "decorations": false,

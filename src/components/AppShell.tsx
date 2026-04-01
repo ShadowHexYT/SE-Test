@@ -1,9 +1,9 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, Dispatch, MutableRefObject, SetStateAction } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   CopyIcon,
-  EyeOffIcon,
+  DownloadIcon,
   GlobeIcon,
   ImageIcon,
   LinkIcon,
@@ -14,30 +14,21 @@ import {
   PlusIcon,
   SearchIcon,
   SettingsIcon,
+  StarIcon,
   SunIcon,
   TextIcon,
   TrashIcon,
 } from "./Icons";
-import type { PlatformMeta, Preferences } from "../types";
+import type {
+  NoteFilter,
+  PlatformMeta,
+  Preferences,
+  QuickNote,
+  SavedWebsite,
+} from "../types";
 
 type PrimaryMode = "clipboard" | "notes" | "websites";
-
-interface QuickNote {
-  id: string;
-  title: string;
-  body: string;
-  hidden: boolean;
-  locked: boolean;
-  updatedAt: string;
-}
-
-interface SavedWebsite {
-  id: string;
-  label: string;
-  url: string;
-  description: string;
-  tone: string;
-}
+type NoteExportFormat = "txt" | "md" | "json";
 
 interface AppShellProps {
   clipboard: {
@@ -65,6 +56,7 @@ interface AppShellProps {
     visibleHistory: AppShellProps["clipboard"]["history"];
   };
   loadError: string | null;
+  notes: QuickNote[];
   panel: {
     beginPanelResize: (metaKey: boolean) => void;
     beginSplitResize: (clientX: number) => void;
@@ -86,59 +78,11 @@ interface AppShellProps {
   platformMeta: PlatformMeta;
   preferences: Preferences;
   resolvedTheme: "light" | "dark";
+  setNotes: Dispatch<SetStateAction<QuickNote[]>>;
   setPreferences: Dispatch<SetStateAction<Preferences>>;
+  setWebsites: Dispatch<SetStateAction<SavedWebsite[]>>;
+  websites: SavedWebsite[];
 }
-
-const INITIAL_NOTES: QuickNote[] = [
-  {
-    id: "note-1",
-    title: "Launch notes",
-    body: "Keep the side utility fast. Prioritize quick snippets, checklists, and ideas that are worth resurfacing later.",
-    hidden: false,
-    locked: false,
-    updatedAt: "Just now",
-  },
-  {
-    id: "note-2",
-    title: "Private copy",
-    body: "Account recovery answers and short private references should be lockable before they stay in reach.",
-    hidden: false,
-    locked: true,
-    updatedAt: "12 min ago",
-  },
-  {
-    id: "note-3",
-    title: "Hidden scratchpad",
-    body: "Temporary working note kept out of the main list until I need it again.",
-    hidden: true,
-    locked: false,
-    updatedAt: "Yesterday",
-  },
-];
-
-const INITIAL_WEBSITES: SavedWebsite[] = [
-  {
-    id: "site-1",
-    label: "Instagram",
-    url: "https://www.instagram.com",
-    description: "Saved social feed for quick check-ins while multitasking.",
-    tone: "sunrise",
-  },
-  {
-    id: "site-2",
-    label: "X / Twitter",
-    url: "https://x.com",
-    description: "Fast-moving timeline and notifications in a narrow side surface.",
-    tone: "midnight",
-  },
-  {
-    id: "site-3",
-    label: "Reddit",
-    url: "https://www.reddit.com",
-    description: "Saved community view for reading and scrolling beside your main work.",
-    tone: "ember",
-  },
-];
 
 function formatTimestamp(value: string) {
   const date = /^\d+$/.test(value) ? new Date(Number(value)) : new Date(value);
@@ -187,27 +131,96 @@ function normalizeWebsiteUrl(value: string) {
   return `https://${trimmed}`;
 }
 
+function noteTimeStamp() {
+  return new Date().toISOString();
+}
+
+function formatNoteRelativeLabel(value: string) {
+  const timestamp = new Date(value).getTime();
+  const diffMinutes = Math.max(0, Math.round((Date.now() - timestamp) / 60000));
+
+  if (diffMinutes < 1) {
+    return "Just now";
+  }
+  if (diffMinutes < 60) {
+    return `${diffMinutes} min ago`;
+  }
+
+  return formatTimestamp(value);
+}
+
+function downloadBlob(filename: string, content: string, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export function AppShell({
   clipboard,
   loadError,
+  notes,
   panel,
   platformMeta,
   preferences,
   resolvedTheme,
+  setNotes,
   setPreferences,
+  setWebsites,
+  websites,
 }: AppShellProps) {
   const panelBodyStyle = {
     "--swift-list-width": panel.listWidth,
   } as CSSProperties;
   const lastHapticAtRef = useRef(0);
+  const noteEditorBodyRef = useRef<HTMLTextAreaElement | null>(null);
+
   const [mode, setMode] = useState<PrimaryMode>("clipboard");
-  const [notes, setNotes] = useState<QuickNote[]>(INITIAL_NOTES);
-  const [selectedNoteId, setSelectedNoteId] = useState<string>(INITIAL_NOTES[0].id);
+  const [noteFilter, setNoteFilter] = useState<NoteFilter>("all");
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(notes[0]?.id ?? null);
   const [notesQuery, setNotesQuery] = useState("");
-  const [websites, setWebsites] = useState<SavedWebsite[]>(INITIAL_WEBSITES);
-  const [selectedWebsiteId, setSelectedWebsiteId] = useState<string>(INITIAL_WEBSITES[0].id);
+  const [noteMenu, setNoteMenu] = useState<{ noteId: string; x: number; y: number } | null>(null);
+  const [noteUnlockPassword, setNoteUnlockPassword] = useState("");
+  const [unlockedNoteIds, setUnlockedNoteIds] = useState<string[]>([]);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editorTitle, setEditorTitle] = useState("");
+  const [editorBody, setEditorBody] = useState("");
+  const [exportFormat, setExportFormat] = useState<NoteExportFormat>("md");
+
+  const [selectedWebsiteId, setSelectedWebsiteId] = useState<string | null>(websites[0]?.id ?? null);
   const [websiteQuery, setWebsiteQuery] = useState("");
   const [websiteDraft, setWebsiteDraft] = useState("");
+
+  useEffect(() => {
+    if (!notes.length) {
+      setSelectedNoteId(null);
+      return;
+    }
+
+    if (!selectedNoteId || !notes.some((note) => note.id === selectedNoteId)) {
+      setSelectedNoteId(notes[0].id);
+    }
+  }, [notes, selectedNoteId]);
+
+  useEffect(() => {
+    if (!websites.length) {
+      setSelectedWebsiteId(null);
+      return;
+    }
+
+    if (!selectedWebsiteId || !websites.some((site) => site.id === selectedWebsiteId)) {
+      setSelectedWebsiteId(websites[0].id);
+    }
+  }, [selectedWebsiteId, websites]);
+
+  useEffect(() => {
+    const dismissMenu = () => setNoteMenu(null);
+    window.addEventListener("click", dismissMenu);
+    return () => window.removeEventListener("click", dismissMenu);
+  }, []);
 
   const triggerHaptic = () => {
     const now = Date.now();
@@ -218,23 +231,50 @@ export function AppShell({
 
     lastHapticAtRef.current = now;
     void invoke("trigger_edge_haptic").catch(() => {
-      console.warn("SwiftEdge edge haptic was unavailable.");
+      console.warn("Memora edge haptic was unavailable.");
     });
   };
 
   const visibleNotes = useMemo(() => {
     const normalized = notesQuery.trim().toLowerCase();
 
-    return notes.filter((note) => {
-      if (!normalized) {
-        return true;
-      }
+    return notes
+      .filter((note) => {
+        if (noteFilter === "starred" && !note.starred) {
+          return false;
+        }
+        if (noteFilter === "hidden" && !note.hidden) {
+          return false;
+        }
+        if (noteFilter === "locked" && !note.locked) {
+          return false;
+        }
+        if (noteFilter === "all" && note.hidden) {
+          return false;
+        }
 
-      return `${note.title} ${note.body}`.toLowerCase().includes(normalized);
-    });
-  }, [notes, notesQuery]);
+        if (!normalized) {
+          return true;
+        }
 
-  const selectedNote = visibleNotes.find((note) => note.id === selectedNoteId) ?? visibleNotes[0] ?? null;
+        return `${note.title} ${note.body}`.toLowerCase().includes(normalized);
+      })
+      .sort((a, b) => {
+        if (a.starred !== b.starred) {
+          return a.starred ? -1 : 1;
+        }
+
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      });
+  }, [noteFilter, notes, notesQuery]);
+
+  const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? visibleNotes[0] ?? null;
+  const selectedWebsite = websites.find((site) => site.id === selectedWebsiteId) ?? null;
+  const isEditingNote = editingNoteId !== null;
+  const selectedNoteLocked =
+    !!selectedNote?.locked &&
+    !!selectedNote.passwordValue &&
+    !unlockedNoteIds.includes(selectedNote.id);
 
   const visibleWebsites = useMemo(() => {
     const normalized = websiteQuery.trim().toLowerCase();
@@ -248,40 +288,186 @@ export function AppShell({
     });
   }, [websiteQuery, websites]);
 
-  const selectedWebsite =
-    visibleWebsites.find((site) => site.id === selectedWebsiteId) ?? visibleWebsites[0] ?? null;
-
   const createQuickNote = () => {
+    const createdAt = noteTimeStamp();
     const nextNote: QuickNote = {
       id: `note-${Date.now()}`,
       title: "Untitled note",
-      body: "Start typing here. Keep it quick, compact, and easy to revisit from the edge.",
+      body: "",
       hidden: false,
       locked: false,
-      updatedAt: "Just now",
+      starred: false,
+      updatedAt: createdAt,
+      createdAt,
     };
 
-    setNotes((current) => [nextNote, ...current]);
+    setNotes((current) => [...current, nextNote]);
     setSelectedNoteId(nextNote.id);
     setMode("notes");
+    setEditingNoteId(nextNote.id);
+    setEditorTitle(nextNote.title);
+    setEditorBody(nextNote.body);
   };
 
-  const toggleSelectedNote = (key: "hidden" | "locked") => {
-    if (!selectedNote) {
+  const openNoteEditor = (note: QuickNote) => {
+    if (note.locked && note.passwordValue && !unlockedNoteIds.includes(note.id)) {
+      setSelectedNoteId(note.id);
       return;
     }
 
+    setEditingNoteId(note.id);
+    setEditorTitle(note.title);
+    setEditorBody(note.body);
+    setNoteMenu(null);
+  };
+
+  const saveEditedNote = () => {
+    if (!editingNoteId) {
+      return;
+    }
+
+    const updatedAt = noteTimeStamp();
     setNotes((current) =>
       current.map((note) =>
-        note.id === selectedNote.id
+        note.id === editingNoteId
           ? {
               ...note,
-              [key]: !note[key],
-              updatedAt: "Just now",
+              title: editorTitle.trim() || "Untitled note",
+              body: editorBody,
+              updatedAt,
             }
           : note,
       ),
     );
+    setEditingNoteId(null);
+  };
+
+  const toggleNoteStar = (noteId: string) => {
+    const updatedAt = noteTimeStamp();
+    setNotes((current) =>
+      current.map((note) =>
+        note.id === noteId
+          ? {
+              ...note,
+              starred: !note.starred,
+              updatedAt,
+            }
+          : note,
+      ),
+    );
+  };
+
+  const deleteNote = (noteId: string) => {
+    setNotes((current) => current.filter((note) => note.id !== noteId));
+    setUnlockedNoteIds((current) => current.filter((id) => id !== noteId));
+    if (editingNoteId === noteId) {
+      setEditingNoteId(null);
+    }
+    if (selectedNoteId === noteId) {
+      setSelectedNoteId(null);
+    }
+    setNoteMenu(null);
+  };
+
+  const setNotePassword = (note: QuickNote) => {
+    const passwordValue = window.prompt(
+      note.passwordValue
+        ? "Update note password. Leave blank to remove protection."
+        : "Set a password for this note. Leave blank to cancel.",
+      note.passwordValue ?? "",
+    );
+
+    if (passwordValue === null) {
+      setNoteMenu(null);
+      return;
+    }
+
+    const trimmedPassword = passwordValue.trim();
+    const updatedAt = noteTimeStamp();
+
+    if (!trimmedPassword) {
+      setNotes((current) =>
+        current.map((entry) =>
+          entry.id === note.id
+            ? {
+                ...entry,
+                locked: false,
+                passwordHint: undefined,
+                passwordValue: undefined,
+                updatedAt,
+              }
+            : entry,
+        ),
+      );
+      setUnlockedNoteIds((current) => [...new Set([...current, note.id])]);
+      setNoteMenu(null);
+      return;
+    }
+
+    const hint = window.prompt("Optional password hint", note.passwordHint ?? "");
+    setNotes((current) =>
+      current.map((entry) =>
+        entry.id === note.id
+          ? {
+              ...entry,
+              locked: true,
+              passwordHint: hint?.trim() || undefined,
+              passwordValue: trimmedPassword,
+              updatedAt,
+            }
+          : entry,
+      ),
+    );
+    setUnlockedNoteIds((current) => current.filter((id) => id !== note.id));
+    setNoteMenu(null);
+  };
+
+  const exportNote = (note: QuickNote, format: NoteExportFormat) => {
+    const base = (note.title || "memora-note").trim().replace(/[^\w-]+/g, "-").toLowerCase();
+
+    if (format === "txt") {
+      downloadBlob(`${base}.txt`, `${note.title}\n\n${note.body}`, "text/plain;charset=utf-8");
+      return;
+    }
+
+    if (format === "md") {
+      downloadBlob(`${base}.md`, `# ${note.title}\n\n${note.body}`, "text/markdown;charset=utf-8");
+      return;
+    }
+
+    downloadBlob(
+      `${base}.json`,
+      JSON.stringify(note, null, 2),
+      "application/json;charset=utf-8",
+    );
+  };
+
+  const applyEditorFormat = (format: "bold" | "italic" | "bullet") => {
+    const textarea = noteEditorBodyRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selection = editorBody.slice(start, end) || "text";
+    let nextSelection = selection;
+
+    if (format === "bold") {
+      nextSelection = `**${selection}**`;
+    } else if (format === "italic") {
+      nextSelection = `*${selection}*`;
+    } else {
+      nextSelection = `- ${selection}`;
+    }
+
+    const nextValue = `${editorBody.slice(0, start)}${nextSelection}${editorBody.slice(end)}`;
+    setEditorBody(nextValue);
+
+    window.requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start, start + nextSelection.length);
+    });
   };
 
   const addWebsite = () => {
@@ -295,7 +481,7 @@ export function AppShell({
       id: `site-${Date.now()}`,
       label: getHostname(normalizedUrl),
       url: normalizedUrl,
-      description: "New saved destination ready to open inside SwiftEdge.",
+      description: "New saved destination ready to open inside Memora.",
       tone: "ocean",
     };
 
@@ -393,8 +579,8 @@ export function AppShell({
                 <button className="account-chip" type="button" aria-label="Link Google account">
                   <span className="account-chip__avatar">G</span>
                 </button>
-                <span className="panel__eyebrow">SwiftEdge</span>
-                <span className="panel__brand">SwiftEdge</span>
+                <span className="panel__eyebrow">Memora</span>
+                <span className="panel__brand">Memora</span>
                 <div className="theme-toggle" role="group" aria-label="Theme mode">
                   <button
                     className="theme-toggle__option"
@@ -463,7 +649,7 @@ export function AppShell({
                 </div>
               </div>
 
-              <div className="panel__primary-nav" role="tablist" aria-label="SwiftEdge sections">
+              <div className="panel__primary-nav" role="tablist" aria-label="Memora sections">
                 {[
                   { value: "clipboard", label: "Clipboard", icon: <CopyIcon /> },
                   { value: "notes", label: "Notes", icon: <NoteIcon /> },
@@ -639,13 +825,11 @@ export function AppShell({
                               <div className="item__preview">{summarizeText(item.text)}</div>
                             ) : (
                               <div className="item__preview item__preview--image">
-                                <img
-                                  className="item__thumbnail"
-                                  src={item.imageDataUrl}
-                                  alt="Clipboard preview"
-                                />
+                                <img className="item__thumbnail" src={item.imageDataUrl} alt="Clipboard preview" />
                                 <div>
-                                  <div>{item.width} x {item.height}</div>
+                                  <div>
+                                    {item.width} x {item.height}
+                                  </div>
                                   <div className="item__timestamp">Ready to copy back instantly</div>
                                 </div>
                               </div>
@@ -658,7 +842,7 @@ export function AppShell({
                         <div className="empty-state__card">
                           <div className="empty-state__title">Clipboard stays ready here</div>
                           <div className="empty-state__body">
-                            Copy text, links, or images and SwiftEdge will keep the latest history in this edge panel.
+                            Copy text, links, or images and Memora will keep the latest history in this edge panel.
                           </div>
                         </div>
                       </div>
@@ -757,30 +941,18 @@ export function AppShell({
                         <div className="startup-state__card">
                           <div className="startup-state__title">Hover, copy, reuse</div>
                           <div className="startup-state__body">
-                            SwiftEdge stays slim on the edge until you need a focused clipboard workspace.
+                            Memora stays slim on the edge until you need a focused clipboard workspace.
                           </div>
                         </div>
                       </div>
                     )}
-
-                    <div className="detail-card detail-card--muted">
-                      <div className="detail-card__meta">
-                        <span>Panel behavior</span>
-                        <span>{panel.phase}</span>
-                      </div>
-                      <div className="detail-pane__placeholder">
-                        Right-edge trigger stays visible. Auto-close follows{" "}
-                        {preferences.dismissMode === "hover-off" ? "hover-off timing" : "click-away focus"}.
-                        Premium web panels now have a dedicated mode shell without disturbing clipboard-first flow.
-                      </div>
-                    </div>
                   </div>
                 </section>
               </div>
             ) : null}
 
             {mode === "notes" ? (
-              <div className="panel__body panel__body--mode panel__body--compact-mode">
+              <div className="panel__body panel__body--mode panel__body--notes">
                 <aside className="list-pane">
                   <div className="list-pane__toolbar">
                     <label className="panel__search panel__search--inline">
@@ -794,91 +966,328 @@ export function AppShell({
                     </label>
 
                     <div className="list-pane__toolbar-row">
-                      <button className="chip-button chip-button--accent" type="button" onClick={createQuickNote}>
-                        <PlusIcon />
-                        New note
-                      </button>
+                      <div className="segment">
+                        {[
+                          ["all", "All"],
+                          ["starred", "Starred"],
+                          ["locked", "Locked"],
+                          ["hidden", "Hidden"],
+                        ].map(([value, label]) => (
+                          <button
+                            key={value}
+                            className="segment__button"
+                            type="button"
+                            data-active={noteFilter === value}
+                            onClick={() => setNoteFilter(value as NoteFilter)}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
                   <div className="history">
-                    {visibleNotes.map((note) => (
-                      <button
-                        key={note.id}
-                        className="item item--note"
-                        type="button"
-                        data-selected={selectedNote?.id === note.id}
-                        onClick={() => setSelectedNoteId(note.id)}
-                      >
-                        <div className="item__row">
-                          <div className="item__type">
-                            <NoteIcon />
-                            {note.title}
+                    {visibleNotes.length ? (
+                      visibleNotes.map((note) => (
+                        <button
+                          key={note.id}
+                          className="item item--note"
+                          type="button"
+                          data-selected={selectedNote?.id === note.id}
+                          onClick={() => setSelectedNoteId(note.id)}
+                          onDoubleClick={() => openNoteEditor(note)}
+                          onContextMenu={(event) => {
+                            event.preventDefault();
+                            setSelectedNoteId(note.id);
+                            setNoteMenu({
+                              noteId: note.id,
+                              x: event.clientX,
+                              y: event.clientY,
+                            });
+                          }}
+                        >
+                          <div className="item__row">
+                            <div className="item__type">
+                              <NoteIcon />
+                              {note.title}
+                            </div>
+                            <div className="item__row-actions">
+                              {note.starred ? <StarIcon filled /> : null}
+                              <span className="item__badge">{formatNoteRelativeLabel(note.updatedAt)}</span>
+                            </div>
                           </div>
-                          <span className="item__badge">{note.updatedAt}</span>
+                          <div className="note-flags">
+                            {note.hidden ? <span className="mini-badge">Hidden</span> : null}
+                            {note.locked ? <span className="mini-badge">Locked</span> : null}
+                          </div>
+                          <div className="item__preview">{summarizeText(note.body)}</div>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="empty-state">
+                        <div className="empty-state__card">
+                          <div className="empty-state__title">No notes in this category</div>
+                          <div className="empty-state__body">
+                            Create a note, star one for quick access, or reveal hidden notes from the category row.
+                          </div>
                         </div>
-                        <div className="note-flags">
-                          {note.hidden ? <span className="mini-badge">Hidden</span> : null}
-                          {note.locked ? <span className="mini-badge">Locked</span> : null}
-                        </div>
-                        <div className="item__preview">{summarizeText(note.body)}</div>
-                      </button>
-                    ))}
+                      </div>
+                    )}
                   </div>
                 </aside>
 
-                <section className="detail-pane">
+                <section className="detail-pane detail-pane--notes">
                   <div className="detail-pane__header">
                     <div>
-                      <div className="detail-pane__title">{selectedNote?.title ?? "No note selected"}</div>
+                      <div className="detail-pane__title">{selectedNote?.title ?? "Notes"}</div>
                       <div className="list-pane__meta">
-                        {selectedNote ? "Quick access note detail" : "Select or create a note"}
+                        {selectedNote ? "Double-click or use the menu to edit" : "Create a note to get started"}
                       </div>
                     </div>
 
                     <div className="detail-pane__actions">
-                      <button className="chip-button" type="button" onClick={() => toggleSelectedNote("hidden")} disabled={!selectedNote}>
-                        <EyeOffIcon />
+                      <button
+                        className="chip-button"
+                        type="button"
+                        onClick={() => selectedNote && toggleNoteStar(selectedNote.id)}
+                        disabled={!selectedNote}
+                      >
+                        <StarIcon filled={!!selectedNote?.starred} />
                       </button>
-                      <button className="chip-button" type="button" onClick={() => toggleSelectedNote("locked")} disabled={!selectedNote}>
+                      <button
+                        className="chip-button"
+                        type="button"
+                        onClick={() => selectedNote && setNotePassword(selectedNote)}
+                        disabled={!selectedNote}
+                      >
                         <LockIcon />
+                      </button>
+                      <button
+                        className="chip-button"
+                        type="button"
+                        onClick={() => selectedNote && exportNote(selectedNote, exportFormat)}
+                        disabled={!selectedNote}
+                      >
+                        <DownloadIcon />
                       </button>
                     </div>
                   </div>
 
                   <div className="detail-pane__scroll">
                     {selectedNote ? (
-                      <>
+                      selectedNoteLocked ? (
                         <div className="detail-card">
                           <div className="detail-card__meta">
-                            <span>{selectedNote.hidden ? "Hidden note" : "Visible note"}</span>
-                            <span>{selectedNote.updatedAt}</span>
+                            <span>Protected note</span>
+                            <span>{selectedNote.passwordHint ? `Hint: ${selectedNote.passwordHint}` : "Password required"}</span>
                           </div>
-                          <div className="detail-card__text">{selectedNote.body}</div>
+                          <div className="note-lock-card">
+                            <input
+                              className="note-lock-card__input"
+                              type="password"
+                              placeholder="Enter note password"
+                              value={noteUnlockPassword}
+                              onChange={(event) => setNoteUnlockPassword(event.currentTarget.value)}
+                            />
+                            <button
+                              className="chip-button chip-button--accent"
+                              type="button"
+                              onClick={() => {
+                                if (noteUnlockPassword === selectedNote.passwordValue) {
+                                  setUnlockedNoteIds((current) => [...new Set([...current, selectedNote.id])]);
+                                  setNoteUnlockPassword("");
+                                }
+                              }}
+                            >
+                              Unlock
+                            </button>
+                          </div>
                         </div>
-                        <div className="detail-card detail-card--muted">
+                      ) : (
+                        <div className="detail-card">
                           <div className="detail-card__meta">
-                            <span>Controls</span>
-                            <span>Quick note utility</span>
+                            <span>{selectedNote.starred ? "Starred note" : "Quick note"}</span>
+                            <span>{formatTimestamp(selectedNote.updatedAt)}</span>
                           </div>
-                          <div className="detail-pane__placeholder">
-                            Hide notes from the main list when you want less visual noise, or password-protect them
-                            before keeping them inside reach.
+                          <div className="detail-card__text">{selectedNote.body || "This note is empty."}</div>
+                          <div className="note-detail-footer">
+                            <select
+                              className="note-export-select"
+                              value={exportFormat}
+                              onChange={(event) => setExportFormat(event.currentTarget.value as NoteExportFormat)}
+                            >
+                              <option value="md">Markdown</option>
+                              <option value="txt">Text</option>
+                              <option value="json">JSON</option>
+                            </select>
+                            <button className="chip-button" type="button" onClick={() => openNoteEditor(selectedNote)}>
+                              Edit
+                            </button>
                           </div>
                         </div>
-                      </>
+                      )
                     ) : (
                       <div className="startup-state">
                         <div className="startup-state__card">
-                          <div className="startup-state__title">Fast notes, not a big editor</div>
+                          <div className="startup-state__title">Notes stay quick here</div>
                           <div className="startup-state__body">
-                            Notes in SwiftEdge stay quick, compact, and easy to revisit from the screen edge.
+                            Right-click notes for actions, double-click to edit, and star important ones to keep them at the top.
                           </div>
                         </div>
                       </div>
                     )}
                   </div>
+
+                  <button className="notes-add-fab" type="button" onClick={createQuickNote}>
+                    <PlusIcon />
+                    New note
+                  </button>
                 </section>
+
+                {isEditingNote ? (
+                  <div className="notes-editor-shell">
+                    <div className="notes-editor">
+                      <div className="notes-editor__header">
+                        <button className="chip-button" type="button" onClick={() => setEditingNoteId(null)}>
+                          Close
+                        </button>
+                        <input
+                          className="notes-editor__title"
+                          value={editorTitle}
+                          onChange={(event) => setEditorTitle(event.currentTarget.value)}
+                          placeholder="Untitled note"
+                        />
+                        <div className="notes-editor__actions">
+                          <button className="chip-button" type="button" onClick={() => applyEditorFormat("bold")}>
+                            B
+                          </button>
+                          <button className="chip-button" type="button" onClick={() => applyEditorFormat("italic")}>
+                            I
+                          </button>
+                          <button className="chip-button" type="button" onClick={() => applyEditorFormat("bullet")}>
+                            List
+                          </button>
+                          <button
+                            className="chip-button"
+                            type="button"
+                            onClick={() =>
+                              exportNote(
+                                {
+                                  ...(notes.find((note) => note.id === editingNoteId) ?? {
+                                    id: editingNoteId,
+                                    hidden: false,
+                                    locked: false,
+                                    starred: false,
+                                    updatedAt: noteTimeStamp(),
+                                    createdAt: noteTimeStamp(),
+                                  }),
+                                  title: editorTitle.trim() || "Untitled note",
+                                  body: editorBody,
+                                },
+                                exportFormat,
+                              )
+                            }
+                          >
+                            <DownloadIcon />
+                          </button>
+                          <button className="chip-button chip-button--accent" type="button" onClick={saveEditedNote}>
+                            Save
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="notes-editor__formatting">
+                        <span className="notes-editor__formatting-label">Formatting</span>
+                        <div className="notes-editor__formatting-actions">
+                          <button className="chip-button" type="button" onClick={() => applyEditorFormat("bold")}>
+                            Bold
+                          </button>
+                          <button className="chip-button" type="button" onClick={() => applyEditorFormat("italic")}>
+                            Italic
+                          </button>
+                          <button className="chip-button" type="button" onClick={() => applyEditorFormat("bullet")}>
+                            Bullet
+                          </button>
+                        </div>
+                      </div>
+
+                      <textarea
+                        ref={noteEditorBodyRef}
+                        className="notes-editor__body"
+                        value={editorBody}
+                        onChange={(event) => setEditorBody(event.currentTarget.value)}
+                        placeholder="Write your note here..."
+                      />
+                    </div>
+                  </div>
+                ) : null}
+
+                {noteMenu ? (
+                  <div className="note-menu" style={{ left: noteMenu.x, top: noteMenu.y }}>
+                    <button
+                      className="note-menu__option"
+                      type="button"
+                      onClick={() => {
+                        const note = notes.find((entry) => entry.id === noteMenu.noteId);
+                        if (note) {
+                          openNoteEditor(note);
+                        }
+                      }}
+                    >
+                      Edit note
+                    </button>
+                    <button
+                      className="note-menu__option"
+                      type="button"
+                      onClick={() => {
+                        const note = notes.find((entry) => entry.id === noteMenu.noteId);
+                        if (note) {
+                          toggleNoteStar(note.id);
+                        }
+                        setNoteMenu(null);
+                      }}
+                    >
+                      Star note
+                    </button>
+                    <button
+                      className="note-menu__option"
+                      type="button"
+                      onClick={() => {
+                        const note = notes.find((entry) => entry.id === noteMenu.noteId);
+                        if (note) {
+                          setNotePassword(note);
+                        }
+                      }}
+                    >
+                      Add password
+                    </button>
+                    <button
+                      className="note-menu__option"
+                      type="button"
+                      onClick={() => {
+                        const updatedAt = noteTimeStamp();
+                        setNotes((current) =>
+                          current.map((note) =>
+                            note.id === noteMenu.noteId
+                              ? {
+                                  ...note,
+                                  hidden: !note.hidden,
+                                  updatedAt,
+                                }
+                              : note,
+                          ),
+                        );
+                        setNoteMenu(null);
+                      }}
+                    >
+                      Hide note
+                    </button>
+                    <button className="note-menu__option note-menu__option--danger" type="button" onClick={() => deleteNote(noteMenu.noteId)}>
+                      Delete note
+                    </button>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
@@ -896,9 +1305,6 @@ export function AppShell({
                       />
                     </label>
 
-                    <div className="list-pane__toolbar-row">
-                      <div />
-                    </div>
                     <div className="website-draft">
                       <input
                         value={websiteDraft}
@@ -955,29 +1361,17 @@ export function AppShell({
 
                   <div className="detail-pane__scroll">
                     {selectedWebsite ? (
-                      <>
-                        <div className="detail-card detail-card--browser" data-tone={selectedWebsite.tone}>
-                          <div className="browser-shell__bar">
-                            <span className="browser-shell__dot" />
-                            <span className="browser-shell__dot" />
-                            <span className="browser-shell__dot" />
-                            <div className="browser-shell__address">{selectedWebsite.url}</div>
-                          </div>
-                          <div className="browser-shell__frame">
-                            <iframe src={selectedWebsite.url} title={selectedWebsite.label} loading="lazy" />
-                          </div>
+                      <div className="detail-card detail-card--browser" data-tone={selectedWebsite.tone}>
+                        <div className="browser-shell__bar">
+                          <span className="browser-shell__dot" />
+                          <span className="browser-shell__dot" />
+                          <span className="browser-shell__dot" />
+                          <div className="browser-shell__address">{selectedWebsite.url}</div>
                         </div>
-                        <div className="detail-card detail-card--muted">
-                          <div className="detail-card__meta">
-                            <span>Saved entry</span>
-                            <span>Web mode</span>
-                          </div>
-                          <div className="detail-pane__placeholder">
-                            Some sites may limit embedding, but this mode establishes the lightweight web-panel direction
-                            without turning SwiftEdge into a heavy browser app.
-                          </div>
+                        <div className="browser-shell__frame">
+                          <iframe src={selectedWebsite.url} title={selectedWebsite.label} loading="lazy" />
                         </div>
-                      </>
+                      </div>
                     ) : (
                       <div className="startup-state">
                         <div className="startup-state__card">

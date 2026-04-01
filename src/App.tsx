@@ -9,6 +9,8 @@ import {
   type AppBootstrap,
   type ClipboardItem,
   type Preferences,
+  type QuickNote,
+  type SavedWebsite,
   type ThemeMode,
 } from "./types";
 import "./App.css";
@@ -20,6 +22,8 @@ function App() {
   const [platform, setPlatform] = useState<AppBootstrap["platform"]>("macos");
   const [preferences, setPreferences] = useState<Preferences>(DEFAULT_PREFERENCES);
   const [initialHistory, setInitialHistory] = useState<ClipboardItem[]>(EMPTY_HISTORY);
+  const [notes, setNotes] = useState<QuickNote[]>([]);
+  const [websites, setWebsites] = useState<SavedWebsite[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [systemTheme, setSystemTheme] = useState<Exclude<ThemeMode, "system">>("light");
 
@@ -40,13 +44,15 @@ function App() {
           ...payload.preferences,
         });
         setInitialHistory(payload.history);
+        setNotes(payload.notes);
+        setWebsites(payload.websites);
         setReady(true);
       } catch (error) {
         if (!isMounted) {
           return;
         }
 
-        setLoadError("SwiftEdge could not load its saved state.");
+        setLoadError("Memora could not load its saved state.");
         setReady(true);
         console.error(error);
       }
@@ -99,11 +105,13 @@ function App() {
       payload: {
         preferences,
         history: clipboard.history,
+        notes,
+        websites,
       },
     }).catch((error) => {
-      console.error("Failed to persist SwiftEdge state.", error);
+      console.error("Failed to persist Memora state.", error);
     });
-  }, [ready, preferences, clipboard.history]);
+  }, [ready, preferences, clipboard.history, notes, websites]);
 
   const platformMeta = getPlatformMeta(platform);
   const resolvedTheme = preferences.themeMode === "system" ? systemTheme : preferences.themeMode;
@@ -116,7 +124,11 @@ function App() {
       platformMeta={platformMeta}
       preferences={preferences}
       resolvedTheme={resolvedTheme}
+      notes={notes}
       setPreferences={setPreferences}
+      setNotes={setNotes}
+      setWebsites={setWebsites}
+      websites={websites}
     />
   );
 }

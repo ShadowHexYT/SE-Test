@@ -78,14 +78,48 @@ pub struct ClipboardItem {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuickNote {
+    pub id: String,
+    pub title: String,
+    pub body: String,
+    pub hidden: bool,
+    pub locked: bool,
+    pub starred: bool,
+    #[serde(rename = "passwordHint")]
+    pub password_hint: Option<String>,
+    #[serde(rename = "passwordValue")]
+    pub password_value: Option<String>,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SavedWebsite {
+    pub id: String,
+    pub label: String,
+    pub url: String,
+    pub description: String,
+    pub tone: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersistedAppState {
+    #[serde(default)]
     pub history: Vec<ClipboardItem>,
+    #[serde(default)]
+    pub notes: Vec<QuickNote>,
     pub preferences: Preferences,
+    #[serde(default)]
+    pub websites: Vec<SavedWebsite>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppBootstrap {
     pub history: Vec<ClipboardItem>,
+    pub notes: Vec<QuickNote>,
     pub preferences: Preferences,
     pub platform: String,
+    pub websites: Vec<SavedWebsite>,
 }

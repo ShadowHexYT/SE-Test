@@ -35,7 +35,9 @@ pub fn load_state(app: &AppHandle) -> Result<PersistedAppState, String> {
     if !path.exists() {
       return Ok(PersistedAppState {
           history: Vec::new(),
+          notes: Vec::new(),
           preferences: default_preferences(),
+          websites: Vec::new(),
       });
     }
 

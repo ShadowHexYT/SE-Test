@@ -40,8 +40,10 @@ fn load_app_state(app: AppHandle) -> Result<AppBootstrap, String> {
 
     Ok(AppBootstrap {
         history: persisted.history,
+        notes: persisted.notes,
         preferences: persisted.preferences,
         platform: platform.to_string(),
+        websites: persisted.websites,
     })
 }
 
@@ -111,7 +113,7 @@ pub fn run() {
         .manage(shell::ShellState::default())
         .setup(|app| {
             shell::initialize_shell(&app.handle().clone())
-                .expect("failed to initialize SwiftEdge shell");
+                .expect("failed to initialize Memora shell");
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())

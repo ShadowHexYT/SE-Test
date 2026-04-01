@@ -48,7 +48,7 @@ fn ease_out_cubic(progress: f64) -> f64 {
 
 fn current_window(app: &AppHandle) -> Result<WebviewWindow, String> {
     app.get_webview_window("main")
-        .ok_or_else(|| "SwiftEdge main window was not available.".to_string())
+        .ok_or_else(|| "Memora main window was not available.".to_string())
 }
 
 fn docked_frame(
@@ -63,7 +63,7 @@ fn docked_frame(
         .current_monitor()
         .map_err(|error| error.to_string())?
         .or_else(|| app.primary_monitor().ok().flatten())
-        .ok_or_else(|| "SwiftEdge could not resolve a display.".to_string())?;
+        .ok_or_else(|| "Memora could not resolve a display.".to_string())?;
 
     let work_area = monitor.work_area();
     let scale = monitor.scale_factor();
@@ -127,15 +127,15 @@ fn write_shell_state(app: &AppHandle, panel_width: f64, reveal: f64, panel_offse
     *shell_state
         .panel_width
         .lock()
-        .map_err(|_| "SwiftEdge shell width lock was poisoned.".to_string())? = panel_width;
+        .map_err(|_| "Memora shell width lock was poisoned.".to_string())? = panel_width;
     *shell_state
         .reveal
         .lock()
-        .map_err(|_| "SwiftEdge shell reveal lock was poisoned.".to_string())? = reveal;
+        .map_err(|_| "Memora shell reveal lock was poisoned.".to_string())? = reveal;
     *shell_state
         .panel_offset_y
         .lock()
-        .map_err(|_| "SwiftEdge shell offset lock was poisoned.".to_string())? = panel_offset_y;
+        .map_err(|_| "Memora shell offset lock was poisoned.".to_string())? = panel_offset_y;
 
     Ok(())
 }
@@ -163,7 +163,7 @@ pub fn apply_shell_position(
         .state::<ShellState>()
         .edge_side
         .lock()
-        .map_err(|_| "SwiftEdge shell edge-side lock was poisoned.".to_string())? = edge_side;
+        .map_err(|_| "Memora shell edge-side lock was poisoned.".to_string())? = edge_side;
 
     Ok(())
 }
@@ -193,7 +193,7 @@ pub fn animate_shell(
     let start_reveal = *shell_state
         .reveal
         .lock()
-        .map_err(|_| "SwiftEdge shell reveal lock was poisoned.".to_string())?;
+        .map_err(|_| "Memora shell reveal lock was poisoned.".to_string())?;
     let clamped_target = target_reveal.clamp(0.0, 1.0);
     let clamped_width = panel_width.clamp(MIN_PANEL_WIDTH, MAX_PANEL_WIDTH);
     let app_handle = app.clone();
@@ -257,7 +257,7 @@ pub fn get_shell_geometry(app: &AppHandle) -> Result<ShellGeometry, String> {
             .state::<ShellState>()
             .edge_side
             .lock()
-            .map_err(|_| "SwiftEdge shell edge-side lock was poisoned.".to_string())?
+            .map_err(|_| "Memora shell edge-side lock was poisoned.".to_string())?
         {
             EdgeSide::Left => "left".to_string(),
             EdgeSide::Right => "right".to_string(),

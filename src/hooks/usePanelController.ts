@@ -208,7 +208,7 @@ export function usePanelController({
     }
 
     void getCurrentWindow().setFocus().catch(() => {
-      console.warn("SwiftEdge could not focus its drawer window.");
+      console.warn("Memora could not focus its drawer window.");
     });
     runAnimation("opening", 1);
   };
@@ -337,7 +337,7 @@ export function usePanelController({
           scheduleClose();
         }
       })().catch((error) => {
-        console.error("SwiftEdge shell poll failed.", error);
+        console.error("Memora shell poll failed.", error);
       });
     }, 32);
 

@@ -195,3 +195,41 @@ export function MoonIcon() {
     </svg>
   );
 }
+
+export function StarIcon({ filled = false }: { filled?: boolean }) {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path
+        d="m8 2.1 1.67 3.38 3.73.54-2.7 2.63.64 3.72L8 10.62l-3.34 1.75.64-3.72-2.7-2.63 3.73-.54L8 2.1Z"
+        fill={filled ? "currentColor" : "none"}
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function DownloadIcon() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path
+        d="M8 2.5v6.75m0 0 2.5-2.5M8 9.25l-2.5-2.5M3 12.25h10"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function MoreIcon() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="3.25" cy="8" r="1" fill="currentColor" />
+      <circle cx="8" cy="8" r="1" fill="currentColor" />
+      <circle cx="12.75" cy="8" r="1" fill="currentColor" />
+    </svg>
+  );
+}
