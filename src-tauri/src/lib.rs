@@ -112,6 +112,47 @@ pub fn run() {
     tauri::Builder::default()
         .manage(shell::ShellState::default())
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::{
+                    menu::{Menu, MenuItem, PredefinedMenuItem},
+                    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+                    ActivationPolicy,
+                };
+
+                let app_handle = app.handle().clone();
+                let _ = app_handle.set_activation_policy(ActivationPolicy::Accessory);
+                let _ = app_handle.set_dock_visibility(false);
+
+                let open_item = MenuItem::with_id(&app_handle, "menu_open_memora", "Open Memora", true, None::<&str>)?;
+                let quit_item = PredefinedMenuItem::quit(&app_handle, Some("Quit Memora"))?;
+                let tray_menu = Menu::with_items(&app_handle, &[&open_item, &quit_item])?;
+                let tray_icon = app.default_window_icon().cloned().ok_or_else(|| tauri::Error::AssetNotFound("default window icon".into()))?;
+
+                TrayIconBuilder::with_id("memora-tray")
+                    .icon(tray_icon)
+                    .icon_as_template(true)
+                    .show_menu_on_left_click(false)
+                    .tooltip("Memora")
+                    .menu(&tray_menu)
+                    .on_menu_event(|app, event| {
+                        if event.id().as_ref() == "menu_open_memora" {
+                            let _ = shell::reveal_shell_from_tray(app);
+                        }
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            let _ = shell::reveal_shell_from_tray(&tray.app_handle());
+                        }
+                    })
+                    .build(&app_handle)?;
+            }
+
             shell::initialize_shell(&app.handle().clone())
                 .expect("failed to initialize Memora shell");
             Ok(())

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { cursorPosition, getCurrentWindow } from "@tauri-apps/api/window";
 import type { EdgeSide, PanelPhase, Platform, Preferences } from "../types";
 
@@ -7,7 +8,7 @@ const PANEL_ANIMATION_MS = 220;
 const CLOSE_DELAY_MS = 260;
 const MIN_PANEL_WIDTH = 680;
 const MAX_PANEL_WIDTH = 960;
-const TOP_BOTTOM_MARGIN = 24;
+const POINTER_POLL_MS = 84;
 const HANDLE_ZONE_HEIGHT = 220;
 const TRIGGER_BUFFER = 28;
 const PANEL_BUFFER = 26;
@@ -26,6 +27,7 @@ interface ShellGeometry {
   height: number;
   handleWidth: number;
   edgeSide: EdgeSide;
+  maxOffsetY: number;
 }
 
 type PointerZone =
@@ -129,6 +131,7 @@ export function usePanelController({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const closeDelayRef = useRef<number | null>(null);
   const settleTimerRef = useRef<number | null>(null);
+  const syncFrameRef = useRef<number | null>(null);
   const phaseRef = useRef<PanelPhase>("collapsed");
   const revealRef = useRef(0);
   const panelWidthRef = useRef(preferences.panelWidth);
@@ -136,6 +139,62 @@ export function usePanelController({
   const dismissModeRef = useRef(preferences.dismissMode);
   const edgeSideRef = useRef<EdgeSide>(preferences.edgeSide);
   const pinnedRef = useRef(preferences.pinned);
+  const pendingSyncRef = useRef<{
+    panelWidth: number;
+    reveal: number;
+    panelOffsetY: number;
+    edgeSide: EdgeSide;
+  } | null>(null);
+  const lastSyncedRef = useRef<{
+    panelWidth: number;
+    reveal: number;
+    panelOffsetY: number;
+    edgeSide: EdgeSide;
+  } | null>(null);
+
+  const hasMeaningfulShellDelta = (
+    previous: typeof pendingSyncRef.current,
+    next: NonNullable<typeof pendingSyncRef.current>,
+  ) => {
+    if (!previous) {
+      return true;
+    }
+
+    return (
+      Math.abs(previous.panelWidth - next.panelWidth) > 0.5 ||
+      Math.abs(previous.reveal - next.reveal) > 0.005 ||
+      Math.abs(previous.panelOffsetY - next.panelOffsetY) > 0.5 ||
+      previous.edgeSide !== next.edgeSide
+    );
+  };
+
+  const flushShellSync = () => {
+    syncFrameRef.current = null;
+
+    const pending = pendingSyncRef.current;
+    if (!pending || !hasMeaningfulShellDelta(lastSyncedRef.current, pending)) {
+      return;
+    }
+
+    lastSyncedRef.current = pending;
+    void syncShell(pending.panelWidth, pending.reveal, pending.panelOffsetY);
+  };
+
+  const scheduleShellSync = (panelWidth: number, reveal: number, panelOffsetY: number) => {
+    pendingSyncRef.current = {
+      panelWidth,
+      reveal,
+      panelOffsetY,
+      edgeSide: edgeSideRef.current,
+    };
+
+    if (syncFrameRef.current !== null) {
+      return;
+    }
+
+    syncFrameRef.current = window.setTimeout(flushShellSync, 16);
+  };
+
   const settingsOpenRef = useRef(false);
   const activeZoneRef = useRef<PointerZone>("outside");
   const splitContainerRef = useRef<HTMLDivElement | null>(null);
@@ -175,6 +234,13 @@ export function usePanelController({
     if (settleTimerRef.current) {
       window.clearTimeout(settleTimerRef.current);
       settleTimerRef.current = null;
+    }
+  };
+
+  const clearSyncFrame = () => {
+    if (syncFrameRef.current !== null) {
+      window.clearTimeout(syncFrameRef.current);
+      syncFrameRef.current = null;
     }
   };
 
@@ -280,7 +346,7 @@ export function usePanelController({
 
     setPhaseState("collapsed");
     revealRef.current = 0;
-    void syncShell(panelWidthRef.current, 0, panelOffsetYRef.current);
+    scheduleShellSync(panelWidthRef.current, 0, panelOffsetYRef.current);
 
     const windowHandle = getCurrentWindow();
     let unlistenFocus: (() => void) | undefined;
@@ -306,6 +372,12 @@ export function usePanelController({
 
     const interval = window.setInterval(() => {
       void (async () => {
+        if (settingsOpenRef.current && revealRef.current > 0.95) {
+          activeZoneRef.current = "panel";
+          clearCloseDelay();
+          return;
+        }
+
         const [cursor, geometry] = await Promise.all([cursorPosition(), readShellGeometry()]);
         const zone = classifyPointerZone(cursor.x, cursor.y, geometry);
         activeZoneRef.current = zone;
@@ -339,14 +411,34 @@ export function usePanelController({
       })().catch((error) => {
         console.error("Memora shell poll failed.", error);
       });
-    }, 32);
+    }, POINTER_POLL_MS);
 
     return () => {
       clearCloseDelay();
       clearSettleTimer();
+      clearSyncFrame();
       window.clearInterval(interval);
       unlistenFocus?.();
       window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [platform, ready]);
+
+  useEffect(() => {
+    if (!ready || platform !== "macos") {
+      return;
+    }
+
+    let unlisten: (() => void) | undefined;
+
+    void listen("memora://edge-swipe-open", () => {
+      clearCloseDelay();
+      openPanel();
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+
+    return () => {
+      unlisten?.();
     };
   }, [platform, ready]);
 
@@ -355,7 +447,7 @@ export function usePanelController({
       return;
     }
 
-    void syncShell(panelWidthRef.current, revealRef.current, panelOffsetYRef.current);
+    scheduleShellSync(panelWidthRef.current, revealRef.current, panelOffsetYRef.current);
   }, [preferences.edgeSide, preferences.panelOffsetY, preferences.panelWidth, ready]);
 
   const beginPanelResize = async (metaKey: boolean) => {
@@ -378,7 +470,7 @@ export function usePanelController({
         ...current,
         panelWidth: nextWidth,
       }));
-      void syncShell(nextWidth, revealRef.current, panelOffsetYRef.current);
+      scheduleShellSync(nextWidth, revealRef.current, panelOffsetYRef.current);
     };
 
     const onUp = () => {
@@ -399,14 +491,11 @@ export function usePanelController({
     clearCloseDelay();
     setPhaseState("repositioning");
     const startOffsetY = panelOffsetYRef.current;
+    const geometry = await readShellGeometry();
+    const availableTravel = Math.max(0, geometry.maxOffsetY);
 
-    const onMove = async (event: PointerEvent) => {
-      const geometry = await readShellGeometry();
+    const onMove = (event: PointerEvent) => {
       const delta = event.screenY - startScreenY;
-      const availableTravel = Math.max(
-        0,
-        (window.screen.height - geometry.height - TOP_BOTTOM_MARGIN * 2) / 2,
-      );
       const nextOffset = Math.min(
         availableTravel,
         Math.max(-availableTravel, startOffsetY + delta),
@@ -417,7 +506,7 @@ export function usePanelController({
         ...current,
         panelOffsetY: nextOffset,
       }));
-      void syncShell(panelWidthRef.current, revealRef.current, nextOffset);
+      scheduleShellSync(panelWidthRef.current, revealRef.current, nextOffset);
     };
 
     const onUp = () => {

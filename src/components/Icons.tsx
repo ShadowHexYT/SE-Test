@@ -196,6 +196,27 @@ export function MoonIcon() {
   );
 }
 
+export function CloudIcon() {
+  return (
+    <svg aria-hidden="true" width="34" height="24" viewBox="0 0 34 24" fill="none">
+      <path
+        d="M10.65 19.75h12.38c3.8 0 6.68-2.5 6.68-5.95 0-3.02-2.18-5.34-5.24-5.69C23.85 4.42 20.61 2 16.64 2c-4.58 0-8.23 3.23-8.73 7.43C4.75 9.73 2.31 12.15 2.31 15.18c0 3.26 2.8 5.99 6.7 5.99h1.64Z"
+        fill="url(#memora-cloud-fill)"
+        stroke="currentColor"
+        strokeWidth="1.15"
+        strokeLinejoin="round"
+      />
+      <defs>
+        <linearGradient id="memora-cloud-fill" x1="7" y1="4" x2="26.5" y2="20" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#fbfdff" />
+          <stop offset="0.58" stopColor="#e0ebfb" />
+          <stop offset="1" stopColor="#c5dafb" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
 export function StarIcon({ filled = false }: { filled?: boolean }) {
   return (
     <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">

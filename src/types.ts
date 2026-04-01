@@ -54,6 +54,7 @@ export interface SavedWebsite {
   url: string;
   description: string;
   tone: string;
+  favorite: boolean;
 }
 
 export interface Preferences {

@@ -102,6 +102,8 @@ pub struct SavedWebsite {
     pub url: String,
     pub description: String,
     pub tone: String,
+    #[serde(default)]
+    pub favorite: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

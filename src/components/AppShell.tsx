@@ -9,6 +9,7 @@ import {
   LinkIcon,
   LockIcon,
   MoonIcon,
+  CloudIcon,
   NoteIcon,
   PinIcon,
   PlusIcon,
@@ -191,7 +192,6 @@ export function AppShell({
   const [exportFormat, setExportFormat] = useState<NoteExportFormat>("md");
 
   const [selectedWebsiteId, setSelectedWebsiteId] = useState<string | null>(websites[0]?.id ?? null);
-  const [websiteQuery, setWebsiteQuery] = useState("");
   const [websiteDraft, setWebsiteDraft] = useState("");
 
   useEffect(() => {
@@ -276,17 +276,22 @@ export function AppShell({
     !!selectedNote.passwordValue &&
     !unlockedNoteIds.includes(selectedNote.id);
 
-  const visibleWebsites = useMemo(() => {
-    const normalized = websiteQuery.trim().toLowerCase();
+  const favoriteWebsiteCount = useMemo(
+    () => websites.filter((site) => site.favorite).length,
+    [websites],
+  );
 
-    return websites.filter((site) => {
-      if (!normalized) {
-        return true;
-      }
+  const visibleWebsites = useMemo(
+    () =>
+      [...websites].sort((a, b) => {
+        if (a.favorite !== b.favorite) {
+          return a.favorite ? -1 : 1;
+        }
 
-      return `${site.label} ${site.url} ${site.description}`.toLowerCase().includes(normalized);
-    });
-  }, [websiteQuery, websites]);
+        return a.label.localeCompare(b.label);
+      }),
+    [websites],
+  );
 
   const createQuickNote = () => {
     const createdAt = noteTimeStamp();
@@ -470,6 +475,33 @@ export function AppShell({
     });
   };
 
+  const toggleWebsiteFavorite = (websiteId: string) => {
+    setWebsites((current) => {
+      const target = current.find((site) => site.id === websiteId);
+
+      if (!target) {
+        return current;
+      }
+
+      const nextFavorite = !target.favorite;
+      const currentFavoriteCount = current.filter((site) => site.favorite).length;
+
+      if (nextFavorite && currentFavoriteCount >= 3) {
+        window.alert("You can only keep 3 favorite websites pinned at the top.");
+        return current;
+      }
+
+      return current.map((site) =>
+        site.id === websiteId
+          ? {
+              ...site,
+              favorite: nextFavorite,
+            }
+          : site,
+      );
+    });
+  };
+
   const addWebsite = () => {
     const normalizedUrl = normalizeWebsiteUrl(websiteDraft);
 
@@ -483,6 +515,7 @@ export function AppShell({
       url: normalizedUrl,
       description: "New saved destination ready to open inside Memora.",
       tone: "ocean",
+      favorite: false,
     };
 
     setWebsites((current) => [nextSite, ...current]);
@@ -491,14 +524,8 @@ export function AppShell({
     setMode("websites");
   };
 
-  const primarySearchValue =
-    mode === "clipboard" ? clipboard.query : mode === "notes" ? notesQuery : websiteQuery;
-  const primarySearchPlaceholder =
-    mode === "clipboard"
-      ? "Search clipboard"
-      : mode === "notes"
-        ? "Search notes"
-        : "Search websites";
+  const primarySearchValue = mode === "clipboard" ? clipboard.query : notesQuery;
+  const primarySearchPlaceholder = mode === "clipboard" ? "Search clipboard" : "Search notes";
 
   const updatePrimarySearch = (value: string) => {
     if (mode === "clipboard") {
@@ -506,12 +533,7 @@ export function AppShell({
       return;
     }
 
-    if (mode === "notes") {
-      setNotesQuery(value);
-      return;
-    }
-
-    setWebsiteQuery(value);
+    setNotesQuery(value);
   };
 
   return (
@@ -579,8 +601,12 @@ export function AppShell({
                 <button className="account-chip" type="button" aria-label="Link Google account">
                   <span className="account-chip__avatar">G</span>
                 </button>
-                <span className="panel__eyebrow">Memora</span>
-                <span className="panel__brand">Memora</span>
+                <div className="panel__brand-row">
+                  <span className="panel__brand-cloud" aria-hidden="true">
+                    <CloudIcon />
+                  </span>
+                  <span className="panel__brand">Memora</span>
+                </div>
                 <div className="theme-toggle" role="group" aria-label="Theme mode">
                   <button
                     className="theme-toggle__option"
@@ -636,37 +662,39 @@ export function AppShell({
                   >
                     <PinIcon />
                   </button>
-                  <button
-                    className="icon-button"
-                    type="button"
-                    data-variant="settings"
-                    data-active={panel.settingsOpen}
-                    onClick={() => panel.setSettingsOpen(!panel.settingsOpen)}
-                    aria-label="Open settings"
-                  >
-                    <SettingsIcon />
-                  </button>
                 </div>
               </div>
 
-              <div className="panel__primary-nav" role="tablist" aria-label="Memora sections">
-                {[
-                  { value: "clipboard", label: "Clipboard", icon: <CopyIcon /> },
-                  { value: "notes", label: "Notes", icon: <NoteIcon /> },
-                  { value: "websites", label: "Websites", icon: <GlobeIcon /> },
-                ].map((tab) => (
-                  <button
-                    key={tab.value}
-                    className="panel__primary-tab"
-                    data-active={mode === tab.value}
-                    role="tab"
-                    type="button"
-                    onClick={() => setMode(tab.value as PrimaryMode)}
-                  >
-                    {tab.icon}
-                    <span>{tab.label}</span>
-                  </button>
-                ))}
+              <div className="panel__nav-row">
+                <div className="panel__primary-nav" role="tablist" aria-label="Memora sections">
+                  {[
+                    { value: "clipboard", label: "Clipboard", icon: <CopyIcon /> },
+                    { value: "notes", label: "Notes", icon: <NoteIcon /> },
+                    { value: "websites", label: "Websites", icon: <GlobeIcon /> },
+                  ].map((tab) => (
+                    <button
+                      key={tab.value}
+                      className="panel__primary-tab"
+                      data-active={mode === tab.value}
+                      role="tab"
+                      type="button"
+                      onClick={() => setMode(tab.value as PrimaryMode)}
+                    >
+                      {tab.icon}
+                      <span>{tab.label}</span>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  className="panel__nav-settings icon-button"
+                  type="button"
+                  data-variant="settings"
+                  data-active={panel.settingsOpen}
+                  onClick={() => panel.setSettingsOpen(!panel.settingsOpen)}
+                  aria-label="Open settings"
+                >
+                  <SettingsIcon />
+                </button>
               </div>
             </header>
 
@@ -1140,8 +1168,8 @@ export function AppShell({
                   </div>
 
                   <button className="notes-add-fab" type="button" onClick={createQuickNote}>
-                    <PlusIcon />
-                    New note
+                    <span className="notes-add-fab__plus">+</span>
+                    <span>New Note</span>
                   </button>
                 </section>
 
@@ -1295,27 +1323,8 @@ export function AppShell({
               <div className="panel__body panel__body--mode panel__body--compact-mode">
                 <aside className="list-pane">
                   <div className="list-pane__toolbar">
-                    <label className="panel__search panel__search--inline">
-                      <SearchIcon />
-                      <input
-                        value={primarySearchValue}
-                        onChange={(event) => updatePrimarySearch(event.currentTarget.value)}
-                        placeholder={primarySearchPlaceholder}
-                        spellCheck={false}
-                      />
-                    </label>
-
-                    <div className="website-draft">
-                      <input
-                        value={websiteDraft}
-                        onChange={(event) => setWebsiteDraft(event.currentTarget.value)}
-                        placeholder="Add a website URL"
-                        spellCheck={false}
-                      />
-                      <button className="chip-button chip-button--accent" type="button" onClick={addWebsite}>
-                        <PlusIcon />
-                        Add
-                      </button>
+                    <div className="list-pane__toolbar-row">
+                      <div className="list-pane__meta">Saved websites · up to 3 favorites</div>
                     </div>
                   </div>
 
@@ -1333,7 +1342,10 @@ export function AppShell({
                             <GlobeIcon />
                             {site.label}
                           </div>
-                          <span className="item__badge">{getHostname(site.url)}</span>
+                          <div className="item__row-actions">
+                            {site.favorite ? <StarIcon filled /> : null}
+                            <span className="item__badge">{getHostname(site.url)}</span>
+                          </div>
                         </div>
                         <div className="item__preview">{site.description}</div>
                       </button>
@@ -1352,6 +1364,17 @@ export function AppShell({
 
                     <div className="detail-pane__actions">
                       {selectedWebsite ? (
+                        <button
+                          className="chip-button"
+                          type="button"
+                          onClick={() => toggleWebsiteFavorite(selectedWebsite.id)}
+                          disabled={!selectedWebsite.favorite && favoriteWebsiteCount >= 3}
+                          title={!selectedWebsite.favorite && favoriteWebsiteCount >= 3 ? "Maximum 3 favorites" : "Favorite website"}
+                        >
+                          <StarIcon filled={selectedWebsite.favorite} />
+                        </button>
+                      ) : null}
+                      {selectedWebsite ? (
                         <a className="chip-button chip-button--link" href={selectedWebsite.url} target="_blank" rel="noreferrer">
                           Open
                         </a>
@@ -1360,6 +1383,18 @@ export function AppShell({
                   </div>
 
                   <div className="detail-pane__scroll">
+                    <div className="website-draft website-draft--browser">
+                      <input
+                        value={websiteDraft}
+                        onChange={(event) => setWebsiteDraft(event.currentTarget.value)}
+                        placeholder="Paste a website URL"
+                        spellCheck={false}
+                      />
+                      <button className="chip-button chip-button--accent" type="button" onClick={addWebsite}>
+                        <PlusIcon />
+                        Add URL
+                      </button>
+                    </div>
                     {selectedWebsite ? (
                       <div className="detail-card detail-card--browser" data-tone={selectedWebsite.tone}>
                         <div className="browser-shell__bar">
@@ -1375,9 +1410,9 @@ export function AppShell({
                     ) : (
                       <div className="startup-state">
                         <div className="startup-state__card">
-                          <div className="startup-state__title">Websites stay lightweight here</div>
+                          <div className="startup-state__title">Open a site here</div>
                           <div className="startup-state__body">
-                            Save links you want beside your work and load them inside this edge utility when needed.
+                            Add a URL above, keep it saved in the left column, and browse it inside this panel.
                           </div>
                         </div>
                       </div>

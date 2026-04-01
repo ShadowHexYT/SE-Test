@@ -8,8 +8,7 @@ use std::{
 };
 
 use tauri::{
-    AppHandle, LogicalPosition, LogicalSize, LogicalUnit, Manager, PhysicalPosition, WebviewWindow,
-    WindowSizeConstraints,
+    AppHandle, Emitter, LogicalPosition, LogicalSize, LogicalUnit, Manager, WebviewWindow, WindowSizeConstraints,
 };
 
 use crate::models::EdgeSide;
@@ -21,6 +20,7 @@ pub const DEFAULT_ANIMATION_MS: u64 = 220;
 pub const MIN_PANEL_HEIGHT: f64 = 820.0;
 pub const MAX_PANEL_HEIGHT: f64 = 1440.0;
 pub const WINDOW_VERTICAL_MARGIN: f64 = 12.0;
+pub const EDGE_SWIPE_EVENT: &str = "memora://edge-swipe-open";
 
 pub struct ShellState {
     animation_generation: AtomicU64,
@@ -28,6 +28,8 @@ pub struct ShellState {
     reveal: Mutex<f64>,
     panel_offset_y: Mutex<f64>,
     edge_side: Mutex<EdgeSide>,
+    geometry: Mutex<ShellGeometry>,
+    last_applied_frame: Mutex<Option<AppliedFrame>>,
 }
 
 impl Default for ShellState {
@@ -38,8 +40,25 @@ impl Default for ShellState {
             reveal: Mutex::new(0.0),
             panel_offset_y: Mutex::new(0.0),
             edge_side: Mutex::new(EdgeSide::Right),
+            geometry: Mutex::new(ShellGeometry::default()),
+            last_applied_frame: Mutex::new(None),
         }
     }
+}
+
+#[derive(Clone)]
+struct AppliedFrame {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    focusable: bool,
+}
+
+struct DockedFrame {
+    position: LogicalPosition<f64>,
+    size: LogicalSize<f64>,
+    geometry: ShellGeometry,
 }
 
 fn ease_out_cubic(progress: f64) -> f64 {
@@ -57,7 +76,7 @@ fn docked_frame(
     reveal: f64,
     panel_offset_y: f64,
     edge_side: &EdgeSide,
-) -> Result<(LogicalPosition<f64>, LogicalSize<f64>), String> {
+) -> Result<DockedFrame, String> {
     let window = current_window(app)?;
     let monitor = window
         .current_monitor()
@@ -89,10 +108,22 @@ fn docked_frame(
         EdgeSide::Left => logical_left_edge - (hidden_width / scale) + ((hidden_width / scale) * reveal_progress),
     };
 
-    Ok((
-        LogicalPosition::new(logical_x, logical_y),
-        LogicalSize::new(logical_width, logical_height),
-    ))
+    Ok(DockedFrame {
+        position: LogicalPosition::new(logical_x, logical_y),
+        size: LogicalSize::new(logical_width, logical_height),
+        geometry: ShellGeometry {
+            x: (logical_x * scale).round(),
+            y: (logical_y * scale).round(),
+            width: (logical_width * scale).round(),
+            height: (logical_height * scale).round(),
+            handle_width: (HANDLE_WIDTH * scale).round(),
+            edge_side: match edge_side {
+                EdgeSide::Left => "left".to_string(),
+                EdgeSide::Right => "right".to_string(),
+            },
+            max_offset_y: ((logical_bottom_bound - centered_y).abs()).round(),
+        },
+    })
 }
 
 fn apply_window_style(window: &WebviewWindow, size: LogicalSize<f64>, reveal: f64) -> Result<(), String> {
@@ -150,20 +181,51 @@ pub fn apply_shell_position(
     let clamped_panel_width = panel_width.clamp(MIN_PANEL_WIDTH, MAX_PANEL_WIDTH);
     let clamped_reveal = reveal.clamp(0.0, 1.0);
     let window = current_window(app)?;
-    let (position, size) = docked_frame(app, clamped_panel_width, clamped_reveal, panel_offset_y, &edge_side)?;
+    let frame = docked_frame(app, clamped_panel_width, clamped_reveal, panel_offset_y, &edge_side)?;
+    let focusable = clamped_reveal > 0.02;
+    let next_applied = AppliedFrame {
+        x: frame.position.x,
+        y: frame.position.y,
+        width: frame.size.width,
+        height: frame.size.height,
+        focusable,
+    };
+    let shell_state = app.state::<ShellState>();
+    let mut last_applied = shell_state
+        .last_applied_frame
+        .lock()
+        .map_err(|_| "Memora shell frame lock was poisoned.".to_string())?;
+    let geometry_changed = last_applied.as_ref().map_or(true, |previous| {
+        (previous.x - next_applied.x).abs() > 0.5
+            || (previous.y - next_applied.y).abs() > 0.5
+            || (previous.width - next_applied.width).abs() > 0.5
+            || (previous.height - next_applied.height).abs() > 0.5
+    });
+    let focus_changed = last_applied
+        .as_ref()
+        .map_or(true, |previous| previous.focusable != next_applied.focusable);
 
-    apply_window_style(&window, size, clamped_reveal)?;
-    window.set_size(size).map_err(|error| error.to_string())?;
-    window
-        .set_position(position)
-        .map_err(|error| error.to_string())?;
+    if geometry_changed || focus_changed {
+        apply_window_style(&window, frame.size, clamped_reveal)?;
+    }
+    if geometry_changed {
+        window.set_size(frame.size).map_err(|error| error.to_string())?;
+        window
+            .set_position(frame.position)
+            .map_err(|error| error.to_string())?;
+    }
+    *last_applied = Some(next_applied);
+    drop(last_applied);
 
     write_shell_state(app, clamped_panel_width, clamped_reveal, panel_offset_y)?;
-    *app
-        .state::<ShellState>()
+    *shell_state
         .edge_side
         .lock()
         .map_err(|_| "Memora shell edge-side lock was poisoned.".to_string())? = edge_side;
+    *shell_state
+        .geometry
+        .lock()
+        .map_err(|_| "Memora shell geometry lock was poisoned.".to_string())? = frame.geometry;
 
     Ok(())
 }
@@ -227,11 +289,103 @@ pub fn animate_shell(
 }
 
 pub fn initialize_shell(app: &AppHandle) -> Result<(), String> {
+    initialize_swipe_monitor(app)?;
     sync_shell(app, 760.0, 0.0, 0.0, EdgeSide::Right)?;
     current_window(app)?.show().map_err(|error| error.to_string())
 }
 
-#[derive(serde::Serialize)]
+pub fn reveal_shell_from_tray(app: &AppHandle) -> Result<(), String> {
+    let shell_state = app.state::<ShellState>();
+    let panel_width = *shell_state
+        .panel_width
+        .lock()
+        .map_err(|_| "Memora shell width lock was poisoned.".to_string())?;
+    let panel_offset_y = *shell_state
+        .panel_offset_y
+        .lock()
+        .map_err(|_| "Memora shell offset lock was poisoned.".to_string())?;
+    let edge_side = shell_state
+        .edge_side
+        .lock()
+        .map_err(|_| "Memora shell edge-side lock was poisoned.".to_string())?
+        .clone();
+
+    animate_shell(app, panel_width, 1.0, panel_offset_y, edge_side, DEFAULT_ANIMATION_MS)?;
+    let window = current_window(app)?;
+    window.show().map_err(|error| error.to_string())?;
+    window.set_focus().map_err(|error| error.to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn initialize_swipe_monitor(app: &AppHandle) -> Result<(), String> {
+    use std::ptr::NonNull;
+
+    use block2::RcBlock;
+    use objc2_app_kit::{NSEvent, NSEventMask};
+
+    static SWIPE_MONITOR_INSTALLED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+
+    if SWIPE_MONITOR_INSTALLED.get().is_some() {
+        return Ok(());
+    }
+
+    let app_handle = app.clone();
+    let monitor_block = RcBlock::new(move |event: NonNull<NSEvent>| {
+        let event = unsafe { event.as_ref() };
+        let delta_x = event.deltaX();
+        let scrolling_delta_x = event.scrollingDeltaX();
+        let dominant_delta = if scrolling_delta_x.abs() > delta_x.abs() {
+            scrolling_delta_x
+        } else {
+            delta_x
+        };
+
+        if dominant_delta.abs() < 0.2 {
+            return;
+        }
+
+        let shell_state = app_handle.state::<ShellState>();
+        let edge_side = match shell_state.edge_side.lock() {
+            Ok(edge_side) => edge_side.clone(),
+            Err(_) => return,
+        };
+        let reveal = match shell_state.reveal.lock() {
+            Ok(reveal) => *reveal,
+            Err(_) => return,
+        };
+
+        if reveal > 0.08 {
+            return;
+        }
+
+        let should_open = match edge_side {
+            EdgeSide::Right => dominant_delta < 0.0,
+            EdgeSide::Left => dominant_delta > 0.0,
+        };
+
+        if should_open {
+            let _ = app_handle.emit(EDGE_SWIPE_EVENT, ());
+        }
+    });
+
+    let monitor = NSEvent::addGlobalMonitorForEventsMatchingMask_handler(
+        NSEventMask::Swipe,
+        &monitor_block,
+    )
+    .ok_or_else(|| "Memora could not register its swipe monitor.".to_string())?;
+
+    std::mem::forget(monitor);
+    let _ = SWIPE_MONITOR_INSTALLED.set(());
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn initialize_swipe_monitor(_app: &AppHandle) -> Result<(), String> {
+    Ok(())
+}
+
+#[derive(Clone, Default, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShellGeometry {
     pub x: f64,
@@ -240,27 +394,13 @@ pub struct ShellGeometry {
     pub height: f64,
     pub handle_width: f64,
     pub edge_side: String,
+    pub max_offset_y: f64,
 }
 
 pub fn get_shell_geometry(app: &AppHandle) -> Result<ShellGeometry, String> {
-    let window = current_window(app)?;
-    let position: PhysicalPosition<i32> = window.outer_position().map_err(|error| error.to_string())?;
-    let size = window.outer_size().map_err(|error| error.to_string())?;
-
-    Ok(ShellGeometry {
-        x: f64::from(position.x),
-        y: f64::from(position.y),
-        width: f64::from(size.width),
-        height: f64::from(size.height),
-        handle_width: HANDLE_WIDTH,
-        edge_side: match &*app
-            .state::<ShellState>()
-            .edge_side
-            .lock()
-            .map_err(|_| "Memora shell edge-side lock was poisoned.".to_string())?
-        {
-            EdgeSide::Left => "left".to_string(),
-            EdgeSide::Right => "right".to_string(),
-        },
-    })
+    app.state::<ShellState>()
+        .geometry
+        .lock()
+        .map_err(|_| "Memora shell geometry lock was poisoned.".to_string())
+        .map(|geometry| geometry.clone())
 }
