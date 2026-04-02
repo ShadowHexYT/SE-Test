@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, Dispatch, MutableRefObject, SetStateAction } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  ClipboardIcon,
   CopyIcon,
   CloseIcon,
   DownloadIcon,
@@ -63,6 +64,7 @@ interface AppShellProps {
     beginPanelResize: (metaKey: boolean) => void;
     beginSplitResize: (clientX: number) => void;
     beginVerticalReposition: (metaKey: boolean, startScreenY: number) => void;
+    commitQuickGlance: () => void;
     isOpen: boolean;
     listWidth: string;
     openPanel: () => void;
@@ -566,6 +568,9 @@ export function AppShell({
           className="panel"
           data-open={panel.isOpen}
           data-phase={panel.phase}
+          onPointerDownCapture={() => {
+            panel.commitQuickGlance();
+          }}
           onMouseEnter={() => {
             panel.setIsPanelHovered(true);
             panel.openPanel();
@@ -625,7 +630,7 @@ export function AppShell({
               <div className="panel__nav-row">
                 <div className="panel__primary-nav" role="tablist" aria-label="Memora sections">
                   {[
-                    { value: "clipboard", label: "Clipboard", icon: <CopyIcon /> },
+                    { value: "clipboard", label: "Clipboard", icon: <ClipboardIcon /> },
                     { value: "notes", label: "Notes", icon: <NoteIcon /> },
                     { value: "websites", label: "Websites", icon: <GlobeIcon /> },
                   ].map((tab) => (
@@ -637,7 +642,7 @@ export function AppShell({
                       type="button"
                       onClick={() => setMode(tab.value as PrimaryMode)}
                     >
-                      {tab.icon}
+                      <span className="panel__primary-tab-icon">{tab.icon}</span>
                       <span>{tab.label}</span>
                     </button>
                   ))}

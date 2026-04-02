@@ -38,6 +38,20 @@ export function PinIcon() {
   );
 }
 
+export function ClipboardIcon() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path
+        d="M5.25 3h5.5M6 2h4a1 1 0 0 1 1 1v.5h.75A1.75 1.75 0 0 1 13.5 5.25v7A1.75 1.75 0 0 1 11.75 14h-7A1.75 1.75 0 0 1 3 12.25v-7A1.75 1.75 0 0 1 4.75 3.5H5.5V3a1 1 0 0 1 1-1Z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function CopyIcon() {
   return (
     <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">

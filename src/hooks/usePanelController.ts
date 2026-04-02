@@ -145,6 +145,7 @@ export function usePanelController({
     panelOffsetY: number;
     edgeSide: EdgeSide;
   } | null>(null);
+  const quickGlanceRef = useRef(false);
   const lastSyncedRef = useRef<{
     panelWidth: number;
     reveal: number;
@@ -266,8 +267,15 @@ export function usePanelController({
     }, PANEL_ANIMATION_MS + 30);
   };
 
-  const openPanel = () => {
+  const openPanel = (source: "hover" | "direct" = "direct") => {
     clearCloseDelay();
+
+    if (source === "hover" && !pinnedRef.current && !settingsOpenRef.current) {
+      quickGlanceRef.current = true;
+    }
+    if (source === "direct") {
+      quickGlanceRef.current = false;
+    }
 
     if (phaseRef.current === "expanded" || phaseRef.current === "opening") {
       return;
@@ -296,7 +304,7 @@ export function usePanelController({
       return;
     }
 
-    if (dismissModeRef.current === "hover-off") {
+    if (dismissModeRef.current === "hover-off" || quickGlanceRef.current) {
       const zone = activeZoneRef.current;
       if (zone === "trigger" || zone === "panel" || zone === "buffer") {
         return;
@@ -308,7 +316,7 @@ export function usePanelController({
 
   const scheduleClose = () => {
     if (
-      dismissModeRef.current !== "hover-off" ||
+      (dismissModeRef.current !== "hover-off" && !quickGlanceRef.current) ||
       pinnedRef.current ||
       isStrictlyProtectedState()
     ) {
@@ -387,16 +395,16 @@ export function usePanelController({
         }
 
         if (zone === "trigger") {
-          openPanel();
+          openPanel("hover");
           return;
         }
 
         if (zone === "panel" || zone === "buffer") {
-          if (phaseRef.current === "expanded") {
+          if (phaseRef.current === "expanded" && !quickGlanceRef.current) {
             setPhaseState("interacting");
           }
           if (phaseRef.current === "closing") {
-            openPanel();
+            openPanel("hover");
           }
           return;
         }
@@ -414,6 +422,7 @@ export function usePanelController({
     }, POINTER_POLL_MS);
 
     return () => {
+      quickGlanceRef.current = false;
       clearCloseDelay();
       clearSettleTimer();
       clearSyncFrame();
@@ -432,7 +441,7 @@ export function usePanelController({
 
     void listen("memora://edge-swipe-open", () => {
       clearCloseDelay();
-      openPanel();
+      openPanel("direct");
     }).then((dispose) => {
       unlisten = dispose;
     });
@@ -563,6 +572,12 @@ export function usePanelController({
     beginVerticalReposition,
     isOpen: phase !== "collapsed",
     listWidth,
+    commitQuickGlance: () => {
+      quickGlanceRef.current = false;
+      if (phaseRef.current === "expanded") {
+        setPhaseState("interacting");
+      }
+    },
     openPanel,
     phase,
     requestClose,
@@ -572,13 +587,13 @@ export function usePanelController({
     },
     setIsPanelHovered: () => {
       clearCloseDelay();
-      if (phaseRef.current === "expanded") {
-        setPhaseState("interacting");
-      }
     },
     setPreferences,
     setSettingsOpen: (value: boolean) => {
       settingsOpenRef.current = value;
+      if (value) {
+        quickGlanceRef.current = false;
+      }
       setSettingsOpen(value);
       if (!value) {
         scheduleClose();
@@ -589,6 +604,7 @@ export function usePanelController({
     settingsOpen,
     splitContainerRef,
     togglePinned: () => {
+      quickGlanceRef.current = false;
       setPreferences((current) => ({
         ...current,
         pinned: !current.pinned,
