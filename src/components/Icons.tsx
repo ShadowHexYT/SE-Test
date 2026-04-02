@@ -217,6 +217,14 @@ export function CloudIcon() {
   );
 }
 
+export function CloseIcon() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function StarIcon({ filled = false }: { filled?: boolean }) {
   return (
     <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">

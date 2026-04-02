@@ -3,6 +3,7 @@ import type { CSSProperties, Dispatch, MutableRefObject, SetStateAction } from "
 import { invoke } from "@tauri-apps/api/core";
 import {
   CopyIcon,
+  CloseIcon,
   DownloadIcon,
   GlobeIcon,
   ImageIcon,
@@ -607,50 +608,6 @@ export function AppShell({
                   </span>
                   <span className="panel__brand">Memora</span>
                 </div>
-                <div className="theme-toggle" role="group" aria-label="Theme mode">
-                  <button
-                    className="theme-toggle__option"
-                    type="button"
-                    data-active={preferences.themeMode === "light"}
-                    aria-label="Light mode"
-                    onClick={() => {
-                      setPreferences((current) => ({
-                        ...current,
-                        themeMode:
-                          current.themeMode === "system"
-                            ? resolvedTheme === "light"
-                              ? "dark"
-                              : "light"
-                            : current.themeMode === "light"
-                              ? "dark"
-                              : "light",
-                      }));
-                    }}
-                  >
-                    <SunIcon />
-                  </button>
-                  <button
-                    className="theme-toggle__option"
-                    type="button"
-                    data-active={preferences.themeMode === "dark"}
-                    aria-label="Dark mode"
-                    onClick={() => {
-                      setPreferences((current) => ({
-                        ...current,
-                        themeMode:
-                          current.themeMode === "system"
-                            ? resolvedTheme === "dark"
-                              ? "light"
-                              : "dark"
-                            : current.themeMode === "dark"
-                              ? "light"
-                              : "dark",
-                      }));
-                    }}
-                  >
-                    <MoonIcon />
-                  </button>
-                </div>
                 <div className="panel__toolbar">
                   <button
                     className="icon-button"
@@ -699,8 +656,23 @@ export function AppShell({
             </header>
 
             {panel.settingsOpen ? (
-              <div className="settings">
-                <div className="settings__section-title">Dismiss</div>
+              <>
+                <button
+                  className="settings-backdrop"
+                  type="button"
+                  aria-label="Close settings"
+                  onClick={() => panel.setSettingsOpen(false)}
+                />
+                <div className="settings" onClick={(event) => event.stopPropagation()}>
+                  <button
+                    className="settings__close icon-button"
+                    type="button"
+                    aria-label="Close settings"
+                    onClick={() => panel.setSettingsOpen(false)}
+                  >
+                    <CloseIcon />
+                  </button>
+                  <div className="settings__section-title">Dismiss</div>
                 <button
                   className="settings__option"
                   type="button"
@@ -769,6 +741,56 @@ export function AppShell({
                   </button>
                 </div>
                 <div className="settings__section-title">Appearance</div>
+                <div className="settings__appearance-row">
+                  <div className="settings__appearance-copy">
+                    <div className="settings__label">Theme mode</div>
+                    <div className="settings__hint">Quickly compare light and dark while keeping system as the default.</div>
+                  </div>
+                  <div className="theme-toggle" role="group" aria-label="Theme mode">
+                    <button
+                      className="theme-toggle__option"
+                      type="button"
+                      data-active={preferences.themeMode === "light"}
+                      aria-label="Light mode"
+                      onClick={() => {
+                        setPreferences((current) => ({
+                          ...current,
+                          themeMode:
+                            current.themeMode === "system"
+                              ? resolvedTheme === "light"
+                                ? "dark"
+                                : "light"
+                              : current.themeMode === "light"
+                                ? "dark"
+                                : "light",
+                        }));
+                      }}
+                    >
+                      <SunIcon />
+                    </button>
+                    <button
+                      className="theme-toggle__option"
+                      type="button"
+                      data-active={preferences.themeMode === "dark"}
+                      aria-label="Dark mode"
+                      onClick={() => {
+                        setPreferences((current) => ({
+                          ...current,
+                          themeMode:
+                            current.themeMode === "system"
+                              ? resolvedTheme === "dark"
+                                ? "light"
+                                : "dark"
+                              : current.themeMode === "dark"
+                                ? "light"
+                                : "dark",
+                        }));
+                      }}
+                    >
+                      <MoonIcon />
+                    </button>
+                  </div>
+                </div>
                 <button
                   className="settings__option"
                   type="button"
@@ -787,7 +809,8 @@ export function AppShell({
                     {preferences.themeMode === "system" ? "On" : ""}
                   </div>
                 </button>
-              </div>
+                </div>
+              </>
             ) : null}
 
             {mode === "clipboard" ? (
