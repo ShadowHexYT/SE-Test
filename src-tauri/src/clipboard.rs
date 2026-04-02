@@ -3,7 +3,10 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use image::{ImageBuffer, ImageFormat, RgbaImage};
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
+use std::fs;
 use std::io::Cursor;
+use std::path::PathBuf;
+use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::models::{ClipboardSnapshot, ClipboardType};
@@ -89,14 +92,7 @@ pub fn copy_text_to_clipboard(text: &str) -> Result<(), String> {
 }
 
 pub fn copy_image_to_clipboard(image_data_url: &str) -> Result<(), String> {
-    let encoded = image_data_url
-        .split(',')
-        .nth(1)
-        .ok_or_else(|| "Clipboard image payload was not a valid data URL.".to_string())?;
-
-    let png_bytes = STANDARD
-        .decode(encoded)
-        .map_err(|error| error.to_string())?;
+    let png_bytes = decode_png_bytes(image_data_url)?;
     let image = image::load_from_memory_with_format(&png_bytes, ImageFormat::Png)
         .map_err(|error| error.to_string())?
         .to_rgba8();
@@ -113,4 +109,44 @@ pub fn copy_image_to_clipboard(image_data_url: &str) -> Result<(), String> {
             bytes: Cow::Owned(image.into_raw()),
         })
         .map_err(|error| error.to_string())
+}
+
+fn decode_png_bytes(image_data_url: &str) -> Result<Vec<u8>, String> {
+    let encoded = image_data_url
+        .split(',')
+        .nth(1)
+        .ok_or_else(|| "Clipboard image payload was not a valid data URL.".to_string())?;
+
+    STANDARD
+        .decode(encoded)
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(target_os = "macos")]
+pub fn open_image_in_preview(image_data_url: &str) -> Result<(), String> {
+    let png_bytes = decode_png_bytes(image_data_url)?;
+    let signature = hash_bytes(&png_bytes);
+    let mut output_path: PathBuf = std::env::temp_dir();
+    output_path.push(format!("memora-preview-{signature}.png"));
+
+    fs::write(&output_path, png_bytes).map_err(|error| error.to_string())?;
+
+    Command::new("open")
+        .arg("-a")
+        .arg("Preview")
+        .arg(&output_path)
+        .status()
+        .map_err(|error| error.to_string())
+        .and_then(|status| {
+            if status.success() {
+                Ok(())
+            } else {
+                Err("Memora could not open Preview.".to_string())
+            }
+        })
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn open_image_in_preview(_image_data_url: &str) -> Result<(), String> {
+    Err("Native Preview open is only available on macOS.".to_string())
 }

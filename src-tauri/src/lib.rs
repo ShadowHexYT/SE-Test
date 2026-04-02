@@ -68,6 +68,11 @@ fn copy_image_to_clipboard(image_data_url: &str) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn open_clipboard_image_in_preview(image_data_url: &str) -> Result<(), String> {
+    clipboard::open_image_in_preview(image_data_url)
+}
+
+#[tauri::command]
 fn sync_shell_state(
     app: AppHandle,
     panel_width: f64,
@@ -164,6 +169,7 @@ pub fn run() {
             read_clipboard_snapshot,
             copy_text_to_clipboard,
             copy_image_to_clipboard,
+            open_clipboard_image_in_preview,
             sync_shell_state,
             animate_shell_state,
             get_shell_geometry,

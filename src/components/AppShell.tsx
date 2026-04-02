@@ -106,6 +106,37 @@ function summarizeText(text: string | undefined) {
   return text.length > 160 ? `${text.slice(0, 157)}...` : text;
 }
 
+function formatDetailTimestamp(value: string) {
+  const date = /^\d+$/.test(value) ? new Date(Number(value)) : new Date(value);
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
+function estimateDataUrlBytes(dataUrl: string | undefined) {
+  if (!dataUrl) {
+    return 0;
+  }
+
+  const encoded = dataUrl.split(",")[1] ?? "";
+  const padding = encoded.endsWith("==") ? 2 : encoded.endsWith("=") ? 1 : 0;
+  return Math.max(0, Math.floor((encoded.length * 3) / 4) - padding);
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function isLikelyLink(text: string | undefined) {
   if (!text) {
     return false;
@@ -224,6 +255,18 @@ export function AppShell({
     window.addEventListener("click", dismissMenu);
     return () => window.removeEventListener("click", dismissMenu);
   }, []);
+
+  const openClipboardImagePreview = async (imageDataUrl: string | undefined) => {
+    if (!imageDataUrl) {
+      return;
+    }
+
+    try {
+      await invoke("open_clipboard_image_in_preview", { imageDataUrl });
+    } catch (error) {
+      console.error("Memora could not open Preview for the selected clipboard image.", error);
+    }
+  };
 
   const triggerHaptic = () => {
     const now = Date.now();
@@ -642,8 +685,10 @@ export function AppShell({
                       type="button"
                       onClick={() => setMode(tab.value as PrimaryMode)}
                     >
-                      <span className="panel__primary-tab-icon">{tab.icon}</span>
-                      <span>{tab.label}</span>
+                      <span className="panel__primary-tab-content">
+                        <span className="panel__primary-tab-icon">{tab.icon}</span>
+                        <span className="panel__primary-tab-label">{tab.label}</span>
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -862,35 +907,82 @@ export function AppShell({
                         const isLinkItem = item.type === "text" && isLikelyLink(item.text);
 
                         return (
-                          <button
+                          <div
                             key={item.id}
                             className="item"
-                            type="button"
+                            role="button"
+                            tabIndex={0}
                             data-selected={clipboard.selectedId === item.id}
                             onClick={() => clipboard.setSelectedId(item.id)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                clipboard.setSelectedId(item.id);
+                              }
+                            }}
                           >
                             <div className="item__row">
-                              <div className="item__type">
+                              <div className="item__type item__type--clipboard">
                                 {item.type === "image" ? <ImageIcon /> : isLinkItem ? <LinkIcon /> : <TextIcon />}
                                 {item.type === "image" ? "Image" : isLinkItem ? "Link" : "Text"}
                               </div>
-                              <span className="item__badge">{formatTimestamp(item.createdAt)}</span>
+                              <div className="item__row-actions">
+                                <button
+                                  className="chip-button chip-button--icon"
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    clipboard.deleteItem(item.id);
+                                  }}
+                                  aria-label="Delete clipboard item"
+                                >
+                                  <TrashIcon />
+                                </button>
+                              </div>
                             </div>
 
                             {item.type === "text" ? (
                               <div className="item__preview">{summarizeText(item.text)}</div>
                             ) : (
                               <div className="item__preview item__preview--image">
-                                <img className="item__thumbnail" src={item.imageDataUrl} alt="Clipboard preview" />
-                                <div>
-                                  <div>
-                                    {item.width} x {item.height}
+                                <button
+                                  className="item__thumbnail-button"
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void openClipboardImagePreview(item.imageDataUrl);
+                                  }}
+                                  aria-label="Open clipboard image in Preview"
+                                >
+                                  <img className="item__thumbnail" src={item.imageDataUrl} alt="Clipboard preview" />
+                                </button>
+                                <div className="item__image-meta">
+                                  <div className="item__image-name">Clipped image</div>
+                                  <div className="item__image-stats">
+                                    <div>{item.width} x {item.height}</div>
+                                    <div>{formatBytes(estimateDataUrlBytes(item.imageDataUrl))}</div>
+                                    <div>Clipped {formatDetailTimestamp(item.createdAt)}</div>
                                   </div>
-                                  <div className="item__timestamp">Ready to copy back instantly</div>
+                                  <div className="item__image-hint">Click image to open in Preview</div>
                                 </div>
                               </div>
                             )}
-                          </button>
+
+                            <div className="item__footer">
+                              <button
+                                className="chip-button item__copy-button"
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void clipboard.recopyItem(item);
+                                }}
+                                aria-label="Copy clipboard item"
+                              >
+                                <ClipboardIcon />
+                                <span>Copy</span>
+                              </button>
+                            </div>
+                          </div>
                         );
                       })
                     ) : (
@@ -935,18 +1027,6 @@ export function AppShell({
                         type="button"
                         onClick={() => {
                           if (clipboard.selectedItem) {
-                            void clipboard.recopyItem(clipboard.selectedItem);
-                          }
-                        }}
-                        disabled={!clipboard.selectedItem}
-                      >
-                        <CopyIcon />
-                      </button>
-                      <button
-                        className="chip-button"
-                        type="button"
-                        onClick={() => {
-                          if (clipboard.selectedItem) {
                             clipboard.deleteItem(clipboard.selectedItem.id);
                           }
                         }}
@@ -962,34 +1042,93 @@ export function AppShell({
 
                   <div className="detail-pane__scroll">
                     {clipboard.selectedItem ? (
-                      <div className="detail-card">
-                        <div className="detail-card__meta">
-                          <span>
-                            {clipboard.selectedItem.type === "text"
-                              ? isLikelyLink(clipboard.selectedItem.text)
-                                ? "Link item"
-                                : "Text item"
-                              : "Image item"}
-                          </span>
-                          <span>{formatTimestamp(clipboard.selectedItem.createdAt)}</span>
-                        </div>
+                      <div className="detail-card detail-card--clipboard">
+                        {clipboard.selectedItem.type === "text" ? (
+                          <div className="detail-card__meta detail-card__meta--clipboard">
+                            <span className="mode-pill">
+                              {isLikelyLink(clipboard.selectedItem.text) ? "Link" : "Text"}
+                            </span>
+                            <button
+                              className="chip-button"
+                              type="button"
+                              onClick={() => {
+                                const selectedItem = clipboard.selectedItem;
+                                if (!selectedItem) {
+                                  return;
+                                }
+                                void clipboard.recopyItem(selectedItem);
+                              }}
+                              aria-label="Copy selected clipboard item"
+                            >
+                              <CopyIcon />
+                            </button>
+                          </div>
+                        ) : null}
 
                         {clipboard.selectedItem.type === "text" ? (
-                          <div className="detail-card__text">
+                          <div className="detail-card__text detail-card__text--clipboard">
                             {clipboard.selectedItem.text || "This text item is empty."}
                           </div>
                         ) : (
-                          <>
-                            <img
-                              className="detail-card__image"
-                              src={clipboard.selectedItem.imageDataUrl}
-                              alt="Selected clipboard item"
-                            />
-                            <div className="detail-card__text">
-                              {clipboard.selectedItem.width} x {clipboard.selectedItem.height} image ready to
-                              restore to the clipboard.
+                          <div className="detail-card__image-layout">
+                            <button
+                              className="detail-card__image-button"
+                              type="button"
+                              onClick={() => void openClipboardImagePreview(clipboard.selectedItem?.imageDataUrl)}
+                              aria-label="Open selected clipboard image in Preview"
+                            >
+                              <img
+                                className="detail-card__image"
+                                src={clipboard.selectedItem.imageDataUrl}
+                                alt="Selected clipboard item"
+                              />
+                            </button>
+                            <div className="detail-card__info-grid detail-card__info-grid--sidebar">
+                              <div className="detail-card__info-top">
+                                <span className="mode-pill">Image</span>
+                                <button
+                                  className="chip-button chip-button--icon"
+                                  type="button"
+                                  onClick={() => {
+                                    const selectedItem = clipboard.selectedItem;
+                                    if (!selectedItem) {
+                                      return;
+                                    }
+                                    void clipboard.recopyItem(selectedItem);
+                                  }}
+                                  aria-label="Copy selected clipboard item"
+                                >
+                                  <CopyIcon />
+                                </button>
+                              </div>
+                              <div className="detail-card__info-item">
+                                <span className="detail-card__info-label">Name</span>
+                                <span className="detail-card__info-value">Clipped image</span>
+                              </div>
+                              <div className="detail-card__info-item">
+                                <span className="detail-card__info-label">Type</span>
+                                <span className="detail-card__info-value">PNG image</span>
+                              </div>
+                              <div className="detail-card__info-item">
+                                <span className="detail-card__info-label">Clipped</span>
+                                <span className="detail-card__info-value">{formatDetailTimestamp(clipboard.selectedItem.createdAt)}</span>
+                              </div>
+                              <div className="detail-card__info-item">
+                                <span className="detail-card__info-label">Dimensions</span>
+                                <span className="detail-card__info-value">
+                                  {clipboard.selectedItem.width} x {clipboard.selectedItem.height}
+                                </span>
+                              </div>
+                              <div className="detail-card__info-item">
+                                <span className="detail-card__info-label">Size</span>
+                                <span className="detail-card__info-value">{formatBytes(estimateDataUrlBytes(clipboard.selectedItem.imageDataUrl))}</span>
+                              </div>
+                              <div className="detail-card__info-item">
+                                <span className="detail-card__info-label">Open</span>
+                                <span className="detail-card__info-value">Click preview for Preview</span>
+                              </div>
                             </div>
-                          </>
+                          </div>
                         )}
                       </div>
                     ) : (
