@@ -20,7 +20,7 @@ pub const DEFAULT_ANIMATION_MS: u64 = 220;
 pub const MIN_PANEL_HEIGHT: f64 = 820.0;
 pub const MAX_PANEL_HEIGHT: f64 = 1440.0;
 pub const WINDOW_VERTICAL_MARGIN: f64 = 12.0;
-pub const EDGE_SWIPE_EVENT: &str = "memora://edge-swipe-open";
+pub const EDGE_SWIPE_EVENT: &str = "glint://edge-swipe-open";
 
 pub struct ShellState {
     animation_generation: AtomicU64,
@@ -67,7 +67,7 @@ fn ease_out_cubic(progress: f64) -> f64 {
 
 fn current_window(app: &AppHandle) -> Result<WebviewWindow, String> {
     app.get_webview_window("main")
-        .ok_or_else(|| "Memora main window was not available.".to_string())
+        .ok_or_else(|| "Glint main window was not available.".to_string())
 }
 
 fn docked_frame(
@@ -82,7 +82,7 @@ fn docked_frame(
         .current_monitor()
         .map_err(|error| error.to_string())?
         .or_else(|| app.primary_monitor().ok().flatten())
-        .ok_or_else(|| "Memora could not resolve a display.".to_string())?;
+        .ok_or_else(|| "Glint could not resolve a display.".to_string())?;
 
     let work_area = monitor.work_area();
     let scale = monitor.scale_factor();
@@ -158,15 +158,15 @@ fn write_shell_state(app: &AppHandle, panel_width: f64, reveal: f64, panel_offse
     *shell_state
         .panel_width
         .lock()
-        .map_err(|_| "Memora shell width lock was poisoned.".to_string())? = panel_width;
+        .map_err(|_| "Glint shell width lock was poisoned.".to_string())? = panel_width;
     *shell_state
         .reveal
         .lock()
-        .map_err(|_| "Memora shell reveal lock was poisoned.".to_string())? = reveal;
+        .map_err(|_| "Glint shell reveal lock was poisoned.".to_string())? = reveal;
     *shell_state
         .panel_offset_y
         .lock()
-        .map_err(|_| "Memora shell offset lock was poisoned.".to_string())? = panel_offset_y;
+        .map_err(|_| "Glint shell offset lock was poisoned.".to_string())? = panel_offset_y;
 
     Ok(())
 }
@@ -194,7 +194,7 @@ pub fn apply_shell_position(
     let mut last_applied = shell_state
         .last_applied_frame
         .lock()
-        .map_err(|_| "Memora shell frame lock was poisoned.".to_string())?;
+        .map_err(|_| "Glint shell frame lock was poisoned.".to_string())?;
     let geometry_changed = last_applied.as_ref().map_or(true, |previous| {
         (previous.x - next_applied.x).abs() > 0.5
             || (previous.y - next_applied.y).abs() > 0.5
@@ -221,11 +221,11 @@ pub fn apply_shell_position(
     *shell_state
         .edge_side
         .lock()
-        .map_err(|_| "Memora shell edge-side lock was poisoned.".to_string())? = edge_side;
+        .map_err(|_| "Glint shell edge-side lock was poisoned.".to_string())? = edge_side;
     *shell_state
         .geometry
         .lock()
-        .map_err(|_| "Memora shell geometry lock was poisoned.".to_string())? = frame.geometry;
+        .map_err(|_| "Glint shell geometry lock was poisoned.".to_string())? = frame.geometry;
 
     Ok(())
 }
@@ -255,7 +255,7 @@ pub fn animate_shell(
     let start_reveal = *shell_state
         .reveal
         .lock()
-        .map_err(|_| "Memora shell reveal lock was poisoned.".to_string())?;
+        .map_err(|_| "Glint shell reveal lock was poisoned.".to_string())?;
     let clamped_target = target_reveal.clamp(0.0, 1.0);
     let clamped_width = panel_width.clamp(MIN_PANEL_WIDTH, MAX_PANEL_WIDTH);
     let app_handle = app.clone();
@@ -299,15 +299,15 @@ pub fn reveal_shell_from_tray(app: &AppHandle) -> Result<(), String> {
     let panel_width = *shell_state
         .panel_width
         .lock()
-        .map_err(|_| "Memora shell width lock was poisoned.".to_string())?;
+        .map_err(|_| "Glint shell width lock was poisoned.".to_string())?;
     let panel_offset_y = *shell_state
         .panel_offset_y
         .lock()
-        .map_err(|_| "Memora shell offset lock was poisoned.".to_string())?;
+        .map_err(|_| "Glint shell offset lock was poisoned.".to_string())?;
     let edge_side = shell_state
         .edge_side
         .lock()
-        .map_err(|_| "Memora shell edge-side lock was poisoned.".to_string())?
+        .map_err(|_| "Glint shell edge-side lock was poisoned.".to_string())?
         .clone();
 
     animate_shell(app, panel_width, 1.0, panel_offset_y, edge_side, DEFAULT_ANIMATION_MS)?;
@@ -372,7 +372,7 @@ fn initialize_swipe_monitor(app: &AppHandle) -> Result<(), String> {
         NSEventMask::Swipe,
         &monitor_block,
     )
-    .ok_or_else(|| "Memora could not register its swipe monitor.".to_string())?;
+    .ok_or_else(|| "Glint could not register its swipe monitor.".to_string())?;
 
     std::mem::forget(monitor);
     let _ = SWIPE_MONITOR_INSTALLED.set(());
@@ -401,6 +401,6 @@ pub fn get_shell_geometry(app: &AppHandle) -> Result<ShellGeometry, String> {
     app.state::<ShellState>()
         .geometry
         .lock()
-        .map_err(|_| "Memora shell geometry lock was poisoned.".to_string())
+        .map_err(|_| "Glint shell geometry lock was poisoned.".to_string())
         .map(|geometry| geometry.clone())
 }

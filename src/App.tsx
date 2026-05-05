@@ -52,7 +52,7 @@ function App() {
           return;
         }
 
-        setLoadError("Memora could not load its saved state.");
+        setLoadError("Glint could not load its saved state.");
         setReady(true);
         console.error(error);
       }
@@ -109,7 +109,7 @@ function App() {
         websites,
       },
     }).catch((error) => {
-      console.error("Failed to persist Memora state.", error);
+      console.error("Failed to persist Glint state.", error);
     });
   }, [ready, preferences, clipboard.history, notes, websites]);
 

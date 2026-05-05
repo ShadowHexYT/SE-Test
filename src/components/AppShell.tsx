@@ -264,7 +264,7 @@ export function AppShell({
     try {
       await invoke("open_clipboard_image_in_preview", { imageDataUrl });
     } catch (error) {
-      console.error("Memora could not open Preview for the selected clipboard image.", error);
+      console.error("Glint could not open Preview for the selected clipboard image.", error);
     }
   };
 
@@ -277,7 +277,7 @@ export function AppShell({
 
     lastHapticAtRef.current = now;
     void invoke("trigger_edge_haptic").catch(() => {
-      console.warn("Memora edge haptic was unavailable.");
+      console.warn("Glint edge haptic was unavailable.");
     });
   };
 
@@ -474,7 +474,7 @@ export function AppShell({
   };
 
   const exportNote = (note: QuickNote, format: NoteExportFormat) => {
-    const base = (note.title || "memora-note").trim().replace(/[^\w-]+/g, "-").toLowerCase();
+    const base = (note.title || "glint-note").trim().replace(/[^\w-]+/g, "-").toLowerCase();
 
     if (format === "txt") {
       downloadBlob(`${base}.txt`, `${note.title}\n\n${note.body}`, "text/plain;charset=utf-8");
@@ -559,7 +559,7 @@ export function AppShell({
       id: `site-${Date.now()}`,
       label: getHostname(normalizedUrl),
       url: normalizedUrl,
-      description: "New saved destination ready to open inside Memora.",
+      description: "New saved destination ready to open inside Glint.",
       tone: "ocean",
       favorite: false,
     };
@@ -654,7 +654,7 @@ export function AppShell({
                   <span className="panel__brand-cloud" aria-hidden="true">
                     <CloudIcon />
                   </span>
-                  <span className="panel__brand">Memora</span>
+                  <span className="panel__brand">Glint</span>
                 </div>
                 <div className="panel__toolbar">
                   <button
@@ -671,7 +671,7 @@ export function AppShell({
               </div>
 
               <div className="panel__nav-row">
-                <div className="panel__primary-nav" role="tablist" aria-label="Memora sections">
+                <div className="panel__primary-nav" role="tablist" aria-label="Glint sections">
                   {[
                     { value: "clipboard", label: "Clipboard", icon: <ClipboardIcon /> },
                     { value: "notes", label: "Notes", icon: <NoteIcon /> },
@@ -990,7 +990,7 @@ export function AppShell({
                         <div className="empty-state__card">
                           <div className="empty-state__title">Clipboard stays ready here</div>
                           <div className="empty-state__body">
-                            Copy text, links, or images and Memora will keep the latest history in this edge panel.
+                            Copy text, links, or images and Glint will keep the latest history in this edge panel.
                           </div>
                         </div>
                       </div>
@@ -1136,7 +1136,7 @@ export function AppShell({
                         <div className="startup-state__card">
                           <div className="startup-state__title">Hover, copy, reuse</div>
                           <div className="startup-state__body">
-                            Memora stays slim on the edge until you need a focused clipboard workspace.
+                            Glint stays slim on the edge until you need a focused clipboard workspace.
                           </div>
                         </div>
                       </div>

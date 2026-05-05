@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Memora",
+  "productName": "Glint",
   "version": "0.1.0",
-  "identifier": "com.memora.desktop",
+  "identifier": "com.glint.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "Memora",
+        "title": "Glint",
         "width": 452,
         "height": 900,
         "decorations": false,

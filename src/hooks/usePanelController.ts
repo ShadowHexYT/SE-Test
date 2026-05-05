@@ -282,7 +282,7 @@ export function usePanelController({
     }
 
     void getCurrentWindow().setFocus().catch(() => {
-      console.warn("Memora could not focus its drawer window.");
+      console.warn("Glint could not focus its drawer window.");
     });
     runAnimation("opening", 1);
   };
@@ -417,7 +417,7 @@ export function usePanelController({
           scheduleClose();
         }
       })().catch((error) => {
-        console.error("Memora shell poll failed.", error);
+        console.error("Glint shell poll failed.", error);
       });
     }, POINTER_POLL_MS);
 
@@ -439,7 +439,7 @@ export function usePanelController({
 
     let unlisten: (() => void) | undefined;
 
-    void listen("memora://edge-swipe-open", () => {
+    void listen("glint://edge-swipe-open", () => {
       clearCloseDelay();
       openPanel("direct");
     }).then((dispose) => {

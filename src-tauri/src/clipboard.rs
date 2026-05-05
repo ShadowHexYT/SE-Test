@@ -127,7 +127,7 @@ pub fn open_image_in_preview(image_data_url: &str) -> Result<(), String> {
     let png_bytes = decode_png_bytes(image_data_url)?;
     let signature = hash_bytes(&png_bytes);
     let mut output_path: PathBuf = std::env::temp_dir();
-    output_path.push(format!("memora-preview-{signature}.png"));
+    output_path.push(format!("glint-preview-{signature}.png"));
 
     fs::write(&output_path, png_bytes).map_err(|error| error.to_string())?;
 
@@ -141,7 +141,7 @@ pub fn open_image_in_preview(image_data_url: &str) -> Result<(), String> {
             if status.success() {
                 Ok(())
             } else {
-                Err("Memora could not open Preview.".to_string())
+                Err("Glint could not open Preview.".to_string())
             }
         })
 }

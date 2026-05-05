@@ -129,19 +129,19 @@ pub fn run() {
                 let _ = app_handle.set_activation_policy(ActivationPolicy::Accessory);
                 let _ = app_handle.set_dock_visibility(false);
 
-                let open_item = MenuItem::with_id(&app_handle, "menu_open_memora", "Open Memora", true, None::<&str>)?;
-                let quit_item = PredefinedMenuItem::quit(&app_handle, Some("Quit Memora"))?;
+                let open_item = MenuItem::with_id(&app_handle, "menu_open_glint", "Open Glint", true, None::<&str>)?;
+                let quit_item = PredefinedMenuItem::quit(&app_handle, Some("Quit Glint"))?;
                 let tray_menu = Menu::with_items(&app_handle, &[&open_item, &quit_item])?;
                 let tray_icon = app.default_window_icon().cloned().ok_or_else(|| tauri::Error::AssetNotFound("default window icon".into()))?;
 
-                TrayIconBuilder::with_id("memora-tray")
+                TrayIconBuilder::with_id("glint-tray")
                     .icon(tray_icon)
                     .icon_as_template(true)
                     .show_menu_on_left_click(false)
-                    .tooltip("Memora")
+                    .tooltip("Glint")
                     .menu(&tray_menu)
                     .on_menu_event(|app, event| {
-                        if event.id().as_ref() == "menu_open_memora" {
+                        if event.id().as_ref() == "menu_open_glint" {
                             let _ = shell::reveal_shell_from_tray(app);
                         }
                     })
@@ -159,7 +159,7 @@ pub fn run() {
             }
 
             shell::initialize_shell(&app.handle().clone())
-                .expect("failed to initialize Memora shell");
+                .expect("failed to initialize Glint shell");
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
